@@ -1,4 +1,5 @@
 import os
+import streamlit as st
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, ConfigurationError
 
@@ -15,7 +16,7 @@ def _connect():
         return _connection_ok
 
     _connection_checked = True
-    uri = os.getenv("MONGODB_URI")
+    uri = st.secrets.get("MONGODB_URI") or os.getenv("MONGODB_URI")
 
     if not uri:
         _connection_ok = False
