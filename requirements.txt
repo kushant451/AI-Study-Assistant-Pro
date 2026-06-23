@@ -17,3 +17,4 @@ scipy==1.17.1
 pypdf==4.3.1
 duckduckgo-search==6.3.5
 bcrypt==4.2.0
+PyJWT==2.9.0
