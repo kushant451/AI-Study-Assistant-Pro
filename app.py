@@ -261,9 +261,6 @@ st.markdown("""
 Ask questions from PDFs, take mock interviews, and track your learning progress.
 """)
 
-st.caption(
-    "Built with RAG • LangGraph • Groq • MongoDB"
-)
 if st.session_state.doc_stats:
     st.success(
         f"✅ {st.session_state.doc_stats['document_count']} document(s) processed and ready."
@@ -434,8 +431,3 @@ with tab_interview:
 with tab_progress:
     render_dashboard()
 
-st.divider()
-
-st.caption(
-    "Built with Streamlit • LangGraph • Groq • MongoDB • FAISS"
-)
