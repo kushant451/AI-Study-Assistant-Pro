@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 import os
-print("MONGODB_URI =", os.getenv("MONGODB_URI"))
+# print("MONGODB_URI =", os.getenv("MONGODB_URI"))
 import streamlit as st
 from groq import Groq
 
@@ -163,13 +163,25 @@ if st.session_state.embedder is None:
 
 
 with st.sidebar:
+
     st.success(f"Logged in as **{username}**")
 
     if st.button("Log out", use_container_width=True):
-        st.session_state.auth_token = None
-        st.session_state.username = None
-        st.session_state.messages = []
-        st.rerun()
+        ...
+
+    st.divider()
+
+    st.header("📄 Upload Study Material")
+
+    uploaded_files = st.file_uploader(
+        "Upload one or more PDFs",
+        type=["pdf"],
+        accept_multiple_files=True,
+    )
+
+    col_a, col_b = st.columns(2)
+    process_button = col_a.button("Process", use_container_width=True)
+    clear_button = col_b.button("Clear chat", use_container_width=True)
 
     st.divider()
 
@@ -185,20 +197,8 @@ with st.sidebar:
             "Use LangGraph workflow",
             value=st.session_state.use_langgraph,
         )
+
     
-
-    st.divider()
-    st.header("📄 Upload Study Material")
-
-    uploaded_files = st.file_uploader(
-        "Upload one or more PDFs",
-        type=["pdf"],
-        accept_multiple_files=True,
-    )
-
-    col_a, col_b = st.columns(2)
-    process_button = col_a.button("Process", use_container_width=True)
-    clear_button = col_b.button("Clear chat", use_container_width=True)
 
 
 if clear_button:
@@ -257,22 +257,21 @@ if st.session_state.doc_stats:
 st.title("📚 AI Study Assistant Pro")
 
 st.markdown("""
-### 🚀 Multi-Agent Learning Platform
-
-✅ Multi-PDF RAG Chat
-
-✅ LangGraph Workflow
-
-✅ Mock Interview Generator
-
-✅ Progress Analytics
-
-✅ Chat History & Authentication
+##### Multi-Agent RAG Learning Platform
+Ask questions from PDFs, take mock interviews, and track your learning progress.
 """)
 
 st.caption(
-    "AI-powered study assistant built with RAG, LangGraph, Groq and MongoDB"
+    "Built with RAG • LangGraph • Groq • MongoDB"
 )
+if st.session_state.doc_stats:
+    st.success(
+        f"✅ {st.session_state.doc_stats['document_count']} document(s) processed and ready."
+    )
+else:
+    st.warning(
+        "📄 Upload and process PDFs to begin."
+    )
 col1, col2, col3, col4 = st.columns(4)
 
 col1.metric(
@@ -434,3 +433,9 @@ with tab_interview:
 
 with tab_progress:
     render_dashboard()
+
+st.divider()
+
+st.caption(
+    "Built with Streamlit • LangGraph • Groq • MongoDB • FAISS"
+)
