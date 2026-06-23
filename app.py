@@ -187,10 +187,18 @@ with st.sidebar:
 
     with st.expander("⚙️ Settings", expanded=True):
 
+        groq_key = os.getenv("GROQ_API_KEY")
+
+        if not groq_key:
+            try:
+                groq_key = st.secrets["GROQ_API_KEY"]
+            except Exception:
+                groq_key = ""
+
         api_key = st.text_input(
             "Groq API Key",
             type="password",
-            value=st.secrets.get("GROQ_API_KEY", ""),
+            value=groq_key
         )
 
         st.session_state.use_langgraph = st.toggle(
