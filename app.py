@@ -190,7 +190,7 @@ with st.sidebar:
         api_key = st.text_input(
             "Groq API Key",
             type="password",
-            value=os.getenv("GROQ_API_KEY", ""),
+            value=st.secrets.get("GROQ_API_KEY", ""),
         )
 
         st.session_state.use_langgraph = st.toggle(
