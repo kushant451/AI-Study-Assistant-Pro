@@ -16,7 +16,13 @@ def _connect():
         return _connection_ok
 
     _connection_checked = True
-    uri = st.secrets.get("MONGODB_URI") or os.getenv("MONGODB_URI")
+    uri = os.getenv("MONGODB_URI")
+
+    if not uri:
+        try:
+            uri = st.secrets["MONGODB_URI"]
+        except Exception:
+            uri = None
 
     if not uri:
         _connection_ok = False
