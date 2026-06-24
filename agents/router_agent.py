@@ -123,6 +123,11 @@ def route_query(client, query, has_documents, chat_history):
 
 
 def _doc_qa(client, query, embedder, index, chunks, chat_history):
+    if is_follow_up(query):
+        for msg in reversed(chat_history):
+            if msg["role"] == "user" and not is_follow_up(msg["content"]):
+                query = f"Provide additional theory ONLY about: {msg['content']}"
+                break
 
     retrieved = search(query, embedder, index, chunks, top_k=3)
 
