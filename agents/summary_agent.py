@@ -49,13 +49,34 @@ def detect_style(query):
 def summarize(client, chunks, style="brief"):
 
     if style == "detailed":
-        context = chunks_to_plain_text(chunks, limit=len(chunks))
+        context = chunks_to_plain_text(
+            chunks,
+            limit=min(len(chunks), 20)
+    )
     else:
-        context = chunks_to_plain_text(chunks)
+        context = chunks_to_plain_text(chunks, limit=10)
 
     system_prompt = STYLE_PROMPTS.get(style, STYLE_PROMPTS["brief"])
     user_prompt = f"Material:\n{context}"
 
+    print("STYLE:", style)
+    print("CHUNKS:", len(chunks))
+    print("CONTEXT LENGTH:", len(context))
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.3,
+        )
+    except Exception as e:
+        print("GROQ ERROR:", e)
+        raise
+    
+    
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=[
