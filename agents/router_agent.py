@@ -129,13 +129,7 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
                 query = msg["content"]
                 break
 
-    retrieved = search(query, embedder, index, chunks, top_k=1)
-    retrieved = [
-    r for r in retrieved
-    if "business process re-engineering" not in r["text"].lower()
-    and "bpr" not in r["text"].lower()
-]
-
+    retrieved = search(query, embedder, index, chunks, top_k=5)
     print("\n====================")
     print("QUERY:", query)
     print("====================")
