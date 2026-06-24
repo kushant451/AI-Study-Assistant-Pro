@@ -126,10 +126,14 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
     if is_follow_up(query):
         for msg in reversed(chat_history):
             if msg["role"] == "user" and not is_follow_up(msg["content"]):
-                query = f"Explain in more detail ONLY the SAP Business Workflow topic from the document. Do not use other topics."
+                query = (
+    f"Expand each point in detail for the topic: {msg['content']}. "
+    f"For every point, explain concept, working, importance, advantages, "
+    f"and practical usage. Do not introduce new topics."
+)
                 break
 
-    retrieved = search(query, embedder, index, chunks, top_k=1)
+    retrieved = search(query, embedder, index, chunks, top_k=5)
 
     print("\n====================")
     print("QUERY:", query)
@@ -143,26 +147,28 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
     history_text = format_history(chat_history)
 
     system_prompt = """
-You are an expert university-level study assistant.
+You are an expert university study assistant.
 
-STRICT RULES:
-1. Answer ONLY the exact topic asked.
-2. Ignore any retrieved information that is not directly related to the question.
-3. Do NOT introduce ERP, BPR, implementation strategies, or other unrelated topics unless explicitly asked.
-4. Stay focused on the queried topic only.
-5. Write a detailed university exam-style answer.
-6. If context contains multiple topics, use only the parts relevant to the question.
-7. You may include features, working, benefits, advantages, applications, and best practices IF they are directly related to the topic.
-8. Do not introduce separate topics just to make the answer longer.
-9. If the document does not contain additional information about the topic, clearly state that no further topic-specific information is available.
-10. Never switch to related topics such as ERP, BPR, implementation approaches, or evolution merely to extend the answer.
+RULES:
+1. Answer only from the document context.
+2. Stay focused on the exact topic asked.
+3. Expand every point in detail.
+4. For each point explain:
+   - Meaning
+   - Working
+   - Importance
+   - Advantages
+   - Example (if available)
+5. Do not introduce unrelated topics.
+6. If information is limited, expand the existing point rather than switching topics.
+7. Write in detailed university exam format.
 
 STRUCTURE:
 - Introduction
-- Features / Components
-- Working / Process
-- Benefits / Advantages
-- Applications / Best Practices (if relevant)
+- Detailed Explanation of Each Point
+- Importance
+- Advantages
+- Example (if available)
 - Conclusion
 """
 
