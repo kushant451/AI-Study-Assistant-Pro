@@ -111,11 +111,16 @@ def summarize(client, chunks, style="brief", query=""):
         Material:
         {context}
         """
+        batch_system_prompt = """
+        Summarize this section briefly.
+        Capture all important headings and concepts.
+        Maximum 300 words.
+        """
 
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": batch_system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.3,
@@ -138,7 +143,9 @@ def summarize(client, chunks, style="brief", query=""):
 
     {combined_summary}
     """
-
+    print("NUMBER OF BATCHES:", len(batch_summaries))
+    print("COMBINED SUMMARY LENGTH:", len(combined_summary))
+    print("FINAL PROMPT LENGTH:", len(final_prompt))
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=[
