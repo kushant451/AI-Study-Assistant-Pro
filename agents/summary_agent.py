@@ -85,29 +85,33 @@ def detect_style(query):
 
 def summarize(client, chunks, style="brief", query=""):
 
-    context = chunks_to_plain_text(
-        chunks,
-        limit=len(chunks)
-    )
+    batch_size = 20
+
+    chunk_batches = [
+        chunks[i:i + batch_size]
+        for i in range(0, len(chunks), batch_size)
+    ]
+
+    batch_summaries = []
 
     system_prompt = STYLE_PROMPTS.get(style, STYLE_PROMPTS["brief"])
 
-    print("STYLE SELECTED:", style)
+    for batch in chunk_batches:
+        
 
-    user_prompt = f"""
-    User Request:
-    {query}
+        context = chunks_to_plain_text(
+            batch,
+            limit=len(batch)
+        )
 
-    Material:
-    {context}
-    """
+        user_prompt = f"""
+        User Request:
+        {query}
 
-    print("STYLE:", style)
-    print("CHUNKS:", len(chunks))
-    print("CONTEXT LENGTH:", len(context))
-    print("PROMPT LENGTH:", len(user_prompt))
+        Material:
+        {context}
+        """
 
-    try:
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
@@ -116,8 +120,32 @@ def summarize(client, chunks, style="brief", query=""):
             ],
             temperature=0.3,
         )
-    except Exception as e:
-        print("GROQ ERROR:", e)
-        raise
+
+        batch_summaries.append(
+            response.choices[0].message.content
+        )
+
+    
+
+    print("STYLE SELECTED:", style)
+
+
+    combined_summary = "\n\n".join(batch_summaries)
+
+    final_prompt = f"""
+    Combine the following partial summaries into one complete,
+    well-structured study note.
+
+    {combined_summary}
+    """
+
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": final_prompt},
+        ],
+        temperature=0.3,
+    )
 
     return response.choices[0].message.content
