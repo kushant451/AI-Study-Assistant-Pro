@@ -84,6 +84,8 @@ def detect_style(query):
 
 
 def summarize(client, chunks, style="brief", query=""):
+    print("BATCH MODE ACTIVE")
+
 
     batch_size = 20
 
