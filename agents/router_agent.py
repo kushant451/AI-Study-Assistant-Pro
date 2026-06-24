@@ -126,10 +126,14 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
     if is_follow_up(query):
         for msg in reversed(chat_history):
             if msg["role"] == "user" and not is_follow_up(msg["content"]):
-                query = msg["content"]
+                query = (
+                    f"Expand each point in detail about {msg['content']}. "
+                    f"Include explanation, working, importance, advantages, "
+                    f"examples and applications."
+                )
                 break
 
-    retrieved = search(query, embedder, index, chunks, top_k=5)
+    retrieved = search(query, embedder, index, chunks, top_k=2)
     print("\n====================")
     print("QUERY:", query)
     print("====================")
@@ -173,7 +177,9 @@ STRUCTURE:
         f"Question: {query}\n\n"
         f"STRICT INSTRUCTION:\n"
         f"- Stay ONLY on this topic\n"
-        f"- Expand in full detail\n"
+        f"- Expand every point thoroughly\n"
+        f"- If the document gives short points, elaborate each point academically\n"
+        f"- Explain concepts in paragraph form, not just bullet points\n"
         f"- Write exam-ready answer (10/15 marks)\n"
     )
 
@@ -183,7 +189,7 @@ STRUCTURE:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        temperature=0.3,
+        temperature=0.1,
         max_tokens=2000,
     )
 
