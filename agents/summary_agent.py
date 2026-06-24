@@ -72,7 +72,7 @@ def summarize(client, chunks, style="brief", query=""):
     if style == "detailed":
         context = chunks_to_plain_text(
             chunks,
-            limit=min(len(chunks), 30)
+            limit=min(len(chunks), 20)
         )
     else:
         context = chunks_to_plain_text(chunks, limit=10)
