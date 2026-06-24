@@ -1,20 +1,58 @@
 from rag.citation_engine import chunks_to_plain_text
 
+
 STYLE_PROMPTS = {
     "brief": "Summarize the following study material in 3-4 short bullet points covering only key ideas.",
-    
+
     "detailed": """
 Create complete university exam notes from the document.
 
+Rules:
 - Cover ALL topics
-- Do not skip any section
+- Do not skip any section or unit
 - Use numbered headings
-- 3–5 subpoints per heading
-- Each subpoint 2–4 lines
-- Include definitions, examples, advantages, disadvantages
-- Rewrite in study-note format (not copy-paste)
+- Each heading must have 3–5 subpoints
+- Expand each subpoint in 2–4 lines
+- Include definitions, advantages, disadvantages, examples
+- Rewrite in proper study-note format
 """
 }
+
+
+
+def detect_style(query):
+    query_lower = (query or "").lower()
+
+    if any(word in query_lower for word in [
+        "full pdf summary",
+        "summarize entire pdf",
+        "complete pdf summary",
+        "entire pdf summary"
+    ]):
+        return "detailed"
+
+    if any(word in query_lower for word in [
+        "detail",
+        "detailed",
+        "in depth",
+        "elaborate",
+        "full summary",
+        "long summary",
+        "complete summary",
+        "expand summary",
+        "entire pdf"
+    ]):
+        return "detailed"
+
+    if any(word in query_lower for word in [
+        "exam",
+        "revision",
+        "key points",
+        "important points"
+    ]):
+        return "brief"
+
+    return "brief"
 
 
 def summarize(client, chunks, style="brief", query=""):
@@ -36,13 +74,13 @@ def summarize(client, chunks, style="brief", query=""):
 
         context = chunks_to_plain_text(batch, limit=len(batch))
 
-        # 🔥 SAFE TOKEN CONTROL
+        # SAFE TOKEN CONTROL
         context = context[:1600]
 
         if style == "brief":
             batch_limit = "Max 50-60 words"
         else:
-            batch_limit = "Max 80-100 words with structured points"
+            batch_limit = "Max 80-100 words with key headings"
 
         batch_system_prompt = f"""
 {system_prompt}
@@ -50,7 +88,7 @@ def summarize(client, chunks, style="brief", query=""):
 IMPORTANT:
 - Summarize ONLY this section
 - {batch_limit}
-- Keep headings and key concepts
+- Keep important concepts and structure
 """
 
         user_prompt = f"""
@@ -75,7 +113,7 @@ Material:
 
     combined_summary = "\n".join(batch_summaries)
 
-    # 🔥 FINAL SAFETY LIMIT
+    # FINAL SAFETY LIMIT
     combined_summary = combined_summary[:4000]
 
     final_response = client.chat.completions.create(
