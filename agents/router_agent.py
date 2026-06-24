@@ -126,10 +126,10 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
     if is_follow_up(query):
         for msg in reversed(chat_history):
             if msg["role"] == "user" and not is_follow_up(msg["content"]):
-                query = f"Provide additional theory ONLY about: {msg['content']}"
+                query = f"Explain in more detail ONLY the SAP Business Workflow topic from the document. Do not use other topics."
                 break
 
-    retrieved = search(query, embedder, index, chunks, top_k=3)
+    retrieved = search(query, embedder, index, chunks, top_k=1)
 
     print("\n====================")
     print("QUERY:", query)
@@ -154,6 +154,8 @@ STRICT RULES:
 6. If context contains multiple topics, use only the parts relevant to the question.
 7. You may include features, working, benefits, advantages, applications, and best practices IF they are directly related to the topic.
 8. Do not introduce separate topics just to make the answer longer.
+9. If the document does not contain additional information about the topic, clearly state that no further topic-specific information is available.
+10. Never switch to related topics such as ERP, BPR, implementation approaches, or evolution merely to extend the answer.
 
 STRUCTURE:
 - Introduction

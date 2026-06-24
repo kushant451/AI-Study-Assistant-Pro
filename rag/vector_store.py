@@ -19,6 +19,7 @@ def build_vector_store(chunks, embedder):
 
 
 def search(query, embedder, index, chunks, top_k=15):
+    print("QUERY RECEIVED:", query)
 
     if index is None:
         raise ValueError(
