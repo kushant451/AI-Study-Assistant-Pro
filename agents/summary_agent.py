@@ -87,7 +87,7 @@ def summarize(client, chunks, style="brief", query=""):
     print("BATCH MODE ACTIVE")
 
 
-    batch_size = 20
+    batch_size = 10
 
     chunk_batches = [
         chunks[i:i + batch_size]
@@ -114,9 +114,9 @@ def summarize(client, chunks, style="brief", query=""):
         {context}
         """
         batch_system_prompt = """
-        Summarize this section briefly.
-        Capture all important headings and concepts.
-        Maximum 300 words.
+        Summarize this section.
+        Capture important headings and concepts.
+        Maximum 150 words.
         """
 
         response = client.chat.completions.create(
