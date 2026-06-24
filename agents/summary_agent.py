@@ -32,11 +32,18 @@ Format:
    - Point 3
    - Point 4
 
-Continue until all topics are covered.
-""",
-    "exam": "Summarize the following study material as exam-focused revision notes: key definitions, formulas, and concepts a student is likely to be tested on.",
-}
+IMPORTANT:
 
+- Create a separate heading for every topic found in the document.
+- Do not merge multiple topics into one section.
+- Do not generate page-wise summaries.
+- Generate topic-wise study notes.
+- Cover every unit, chapter and heading present in the document.
+- If 20 topics exist, create 20 topic headings.
+- Do not create a final conclusion section unless it exists in the document.
+- Stop only after all topics are covered.
+"""
+}
 from rag.citation_engine import chunks_to_plain_text
 
 
