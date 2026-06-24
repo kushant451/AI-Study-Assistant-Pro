@@ -40,32 +40,121 @@ st.set_page_config(
 st.markdown("""
 <style>
 
-/* Main page spacing */
-.main {
-    padding-top: 1rem;
+/* Main App Background */
+.stApp {
+    background: linear-gradient(
+        135deg,
+        #f8fafc 0%,
+        #eef2ff 25%,
+        #fdf2f8 50%,
+        #ecfeff 100%
+    );
 }
 
-/* Buttons */
-.stButton > button {
-    width: 100%;
-    border-radius: 12px;
+/* Main container */
+.block-container {
+    padding-top: 2rem;
+    max-width: 1200px;
 }
 
-/* Inputs */
-.stTextInput > div > div > input {
-    border-radius: 10px;
+/* Title */
+h1 {
+    font-size: 3rem !important;
+    font-weight: 800 !important;
+    color: #1e293b !important;
 }
 
-/* Metrics */
+/* Hero Banner */
+.hero-card {
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(20px);
+    border-radius: 24px;
+    padding: 30px;
+    margin-bottom: 25px;
+    border: 1px solid rgba(255,255,255,0.4);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+}
+
+/* Metric Cards */
 div[data-testid="metric-container"] {
-    border: 1px solid #e5e7eb;
-    padding: 12px;
-    border-radius: 12px;
+    background: rgba(255,255,255,0.8);
+    backdrop-filter: blur(15px);
+    border-radius: 24px;
+    padding: 20px;
+    border: none;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+    transition: all .3s ease;
+}
+
+div[data-testid="metric-container"]:hover {
+    transform: translateY(-4px);
 }
 
 /* Sidebar */
-[data-testid="stSidebar"] {
-    padding-top: 1rem;
+section[data-testid="stSidebar"] {
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(20px);
+    border-right: 1px solid rgba(255,255,255,0.3);
+}
+
+/* Buttons */
+.stButton button {
+    border-radius: 16px;
+    border: none;
+    padding: 0.7rem;
+    font-weight: 600;
+    background: linear-gradient(
+        135deg,
+        #6366f1,
+        #8b5cf6
+    );
+    color: white;
+    box-shadow: 0 8px 20px rgba(99,102,241,0.3);
+}
+
+.stButton button:hover {
+    transform: translateY(-2px);
+}
+
+/* Chat Cards */
+[data-testid="stChatMessage"] {
+    background: rgba(255,255,255,0.75);
+    border-radius: 20px;
+    padding: 12px;
+    margin-bottom: 10px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.05);
+}
+
+/* Tabs */
+.stTabs [data-baseweb="tab"] {
+    font-size: 17px;
+    font-weight: 600;
+    padding: 12px 24px;
+    border-radius: 12px;
+}
+
+.stTabs [aria-selected="true"] {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+}
+
+/* Upload Section */
+[data-testid="stFileUploader"] {
+    background: rgba(255,255,255,0.75);
+    border-radius: 20px;
+    padding: 15px;
+    border: 2px dashed #cbd5e1;
+}
+
+/* Success/Info Boxes */
+.stAlert {
+    border-radius: 18px;
+}
+
+/* Text Inputs */
+.stTextInput input {
+    border-radius: 14px !important;
 }
 
 </style>
@@ -265,9 +354,17 @@ if st.session_state.doc_stats:
 st.title("📚 AI Study Assistant Pro")
 
 st.markdown("""
-##### Multi-Agent RAG Learning Platform
-Ask questions from PDFs, take mock interviews, and track your learning progress.
-""")
+<div class="hero-card">
+<h1>📚 AI Study Assistant Pro</h1>
+
+<h3>Multi-Agent RAG Learning Platform</h3>
+
+<p style="font-size:20px;">
+Ask questions from PDFs, take mock interviews,
+and track your learning progress.
+</p>
+</div>
+""", unsafe_allow_html=True)
 
 if st.session_state.doc_stats:
     st.success(
@@ -279,27 +376,31 @@ else:
     )
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric(
-    "📄 Documents",
-    st.session_state.doc_stats["document_count"]
-    if st.session_state.doc_stats else 0
-)
+with col1:
+    st.metric(
+        "📄 Documents",
+        st.session_state.doc_stats["document_count"]
+        if st.session_state.doc_stats else 0
+    )
 
-col2.metric(
-    "🧩 Chunks",
-    st.session_state.doc_stats["chunk_count"]
-    if st.session_state.doc_stats else 0
-)
+with col2:
+    st.metric(
+        "🧩 Chunks",
+        st.session_state.doc_stats["chunk_count"]
+        if st.session_state.doc_stats else 0
+    )
 
-col3.metric(
-    "💬 Messages",
-    len(st.session_state.messages)
-)
+with col3:
+    st.metric(
+        "💬 Messages",
+        len(st.session_state.messages)
+    )
 
-col4.metric(
-    "🎤 Interviews",
-    len(st.session_state.interview_results)
-)
+with col4:
+    st.metric(
+        "🎤 Interviews",
+        len(st.session_state.interview_results)
+    )
 
 tab_chat, tab_interview, tab_progress = st.tabs(
     ["💬 Chat", "🎤 Mock Interview", "📈 Progress"]
