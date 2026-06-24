@@ -144,10 +144,11 @@ STRICT RULES:
 """
 
     if is_follow_up(query):
-        query = (
-            "Write a detailed structured exam-style answer with full explanation: "
-            + query
-        )
+    query = (
+        "Continue explaining ONLY the previously discussed topic. "
+        "Do not introduce new topics. "
+        + query
+    )
 
     user_prompt = (
         f"Recent conversation:\n{history_text}\n\n"
