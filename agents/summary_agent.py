@@ -92,6 +92,8 @@ def summarize(client, chunks, style="brief", query=""):
 
     system_prompt = STYLE_PROMPTS.get(style, STYLE_PROMPTS["brief"])
 
+    print("STYLE SELECTED:", style)
+
     user_prompt = f"""
     User Request:
     {query}
