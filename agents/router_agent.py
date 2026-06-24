@@ -78,15 +78,16 @@ def route_query(client, query, has_documents, chat_history):
     history_text = format_history(chat_history)
     q = query.lower()
 
-    # 🔥 HARD FORCE RULE (MOST IMPORTANT FIX)
-    if "evolution" in q and "erp" in q:
+    if has_documents:
+
+        if "quiz" in q or "mcq" in q:
+            return "quiz"
+
+        if "summary" in q or "summarize" in q:
+            return "summarize"
+
         return "doc_qa"
 
-    if is_follow_up(query):
-        return "doc_qa"
-
-    if is_exam_question(query):
-        return "doc_qa"
 
     if not has_documents:
         prompt = (
