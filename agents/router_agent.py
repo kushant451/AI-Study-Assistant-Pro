@@ -164,14 +164,6 @@ STRUCTURE:
 - Conclusion
 """
 
-    if is_follow_up(query):
-        for msg in reversed(chat_history):
-            if msg["role"] == "user" and not is_follow_up(msg["content"]):
-                query = (
-                    f"Provide additional theory ONLY about: {msg['content']}. "
-                    f"Do not introduce ERP, BPR, implementation approaches, or other related topics."
-                )
-                break
     user_prompt = (
         f"Recent conversation:\n{history_text}\n\n"
         f"Document Context:\n{context}\n\n"
