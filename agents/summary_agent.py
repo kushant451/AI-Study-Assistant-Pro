@@ -105,6 +105,7 @@ def summarize(client, chunks, style="brief", query=""):
     print("STYLE:", style)
     print("CHUNKS:", len(chunks))
     print("CONTEXT LENGTH:", len(context))
+    print("PROMPT LENGTH:", len(user_prompt))
 
     try:
         response = client.chat.completions.create(
