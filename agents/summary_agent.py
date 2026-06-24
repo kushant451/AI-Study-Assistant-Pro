@@ -73,7 +73,7 @@ def summarize(client, chunks, style="brief"):
         context = chunks_to_plain_text(
             chunks,
             limit=min(len(chunks), 20)
-    )
+        )
     else:
         context = chunks_to_plain_text(chunks, limit=10)
 
@@ -96,15 +96,5 @@ def summarize(client, chunks, style="brief"):
     except Exception as e:
         print("GROQ ERROR:", e)
         raise
-    
-    
-    response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.3,
-    )
 
     return response.choices[0].message.content
