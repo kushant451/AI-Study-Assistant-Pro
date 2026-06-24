@@ -144,7 +144,7 @@ STRICT RULES:
 """
 
     if is_follow_up(query):
-    query = (
+        query = (
         "Continue explaining ONLY the previously discussed topic. "
         "Do not introduce new topics. "
         + query
