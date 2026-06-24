@@ -67,18 +67,25 @@ def detect_style(query):
     return "brief"
 
 
-def summarize(client, chunks, style="brief"):
+def summarize(client, chunks, style="brief", query=""):
 
     if style == "detailed":
         context = chunks_to_plain_text(
             chunks,
-            limit=min(len(chunks), 40)
+            limit=min(len(chunks), 20)
         )
     else:
         context = chunks_to_plain_text(chunks, limit=10)
 
     system_prompt = STYLE_PROMPTS.get(style, STYLE_PROMPTS["brief"])
-    user_prompt = f"Material:\n{context}"
+
+    user_prompt = f"""
+    User Request:
+    {query}
+
+    Material:
+    {context}
+    """
 
     print("STYLE:", style)
     print("CHUNKS:", len(chunks))
