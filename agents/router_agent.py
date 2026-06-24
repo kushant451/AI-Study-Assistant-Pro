@@ -83,7 +83,16 @@ def route_query(client, query, has_documents, chat_history):
         if "quiz" in q or "mcq" in q:
             return "quiz"
 
-        if "summary" in q or "summarize" in q:
+        if any(x in q for x in [
+            "summary",
+            "summarize",
+            "full pdf",
+            "complete pdf",
+            "entire pdf",
+            "whole pdf",
+            "full notes",
+            "complete notes"
+        ]):
             return "summarize"
 
         return "doc_qa"
@@ -123,17 +132,20 @@ def route_query(client, query, has_documents, chat_history):
 
 
 def _doc_qa(client, query, embedder, index, chunks, chat_history):
+
     if is_follow_up(query):
         for msg in reversed(chat_history):
             if msg["role"] == "user" and not is_follow_up(msg["content"]):
+
                 query = (
-                    f"Expand each point in detail about {msg['content']}. "
-                    f"Include explanation, working, importance, advantages, "
-                    f"examples and applications."
+                    f"Expand each point in detail about {msg['content']} "
+                    f"using only the document context."
                 )
+
                 break
 
-    retrieved = search(query, embedder, index, chunks, top_k=2)
+
+    retrieved = search(query, embedder, index, chunks, top_k=8)
     print("\n====================")
     print("QUERY:", query)
     print("====================")
@@ -146,45 +158,24 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
     history_text = format_history(chat_history)
 
     system_prompt = """
-You are an expert university study assistant.
+    You are an expert university study assistant.
 
-RULES:
-1. Use the document as the primary source.
-2. You may expand concepts with general academic knowledge when the document provides only brief points.
-3. Stay focused on the exact topic asked.
-4. Expand every point in detail.
-5. For each point explain:
-   - Meaning
-   - Working
-   - Importance
-   - Advantages
-   - Example (if relevant)
-6. Do not introduce unrelated topics such as ERP, BPR, or implementation strategies unless explicitly asked.
-7. Write in detailed university exam format.
-8. Every answer must be detailed enough for a 10-mark university examination.
-9. Use numbered main points with 3-5 subpoints under each point.
-10. Expand each point academically and clearly.
+    RULES:
+    1. Use the document context as the primary source.
+    2. If information is missing, clearly state that it is not available in the document.
+    3. Stay focused on the exact topic asked.
+    4. Explain every relevant point found in the document.
+    5. Do not introduce unrelated topics unless explicitly asked.
+    6. Write in detailed university exam format.
+    7. Every answer must be detailed enough for a 10-mark university examination.
+    8. Use numbered main points with supporting explanations.
+    9. Do not add information not supported by the document context.
 
-STRUCTURE:
-- Introduction
-- Main Points
-- Each Main Point must contain 3-5 subpoints
-- Conclusion
-
-EXAM FORMAT:
-
-1. Main Point
-   - Subpoint
-   - Subpoint
-   - Subpoint
-   - Subpoint
-
-2. Main Point
-   - Subpoint
-   - Subpoint
-   - Subpoint
-   - Subpoint
-"""
+    STRUCTURE:
+    Follow the structure present in the document.
+    Use clear headings, subheadings, and point-wise explanations.
+    Format answers appropriately for university examinations.
+    """
 
     user_prompt = (
         f"Recent conversation:\n{history_text}\n\n"
@@ -193,7 +184,7 @@ EXAM FORMAT:
         f"STRICT INSTRUCTION:\n"
         f"- Stay ONLY on this topic\n"
         f"- Expand every point thoroughly\n"
-        f"- If the document gives short points, elaborate each point academically\n"
+        f"- Use only information available in the document context\n"
         f"- Explain concepts in paragraph form, not just bullet points\n"
         f"- Write exam-ready answer (10/15 marks)\n"
     )
@@ -252,7 +243,13 @@ def run_agent(client, query, embedder=None, index=None, chunks=None, chat_histor
 
     elif tool == "summarize":
         style = detect_style(query)
-        answer = summarize(client, chunks, style=style)
+
+        answer = summarize(
+            client,
+            chunks,
+            style=style,
+            query=query
+        )
 
     elif tool == "quiz":
         extra = generate_quiz(client, chunks)
