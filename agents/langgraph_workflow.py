@@ -49,30 +49,33 @@ def doc_qa_node(state: AgentState) -> dict:
 
     system_prompt = (
         "You are an expert academic study assistant.\n\n"
+
         "Answer exactly what the user asks.\n"
-        "Provide a detailed and exam-oriented explanation.\n\n"
+        "Provide detailed, exam-oriented explanations using only the provided context.\n\n"
+
+        "If the user asks 'more theory', 'expand', 'elaborate', "
+        "or another follow-up question, expand ONLY the topic discussed in the previous answer.\n"
+
+        "Do NOT introduce new topics from the document.\n"
+        "Do NOT jump to other chapters.\n"
+        "Do NOT explain related concepts unless explicitly requested.\n\n"
+
         "If the user asks about evolution, history, phases, development, "
-        "or lifecycle of a topic, explain ONLY the chronological evolution.\n\n"
-        "Do NOT include:\n"
-        "- Benefits\n"
-        "- Advantages\n"
-        "- Disadvantages\n"
-        "- Features\n"
-        "- Modules\n"
-        "- Applications\n"
-        "- Architecture\n"
-        "- Implementation details\n"
-        "- Any related topic not explicitly asked\n\n"
-        "Use headings and numbered points.\n"
-        "Use only the provided context.\n"
-        "If the answer is not present in the context, clearly state that."
-        "If the question asks for evolution, history, phases, or development, "
-        "present the answer as a chronological timeline with numbered stages."
+        "or lifecycle of a topic, explain ONLY the chronological evolution.\n"
+
+        "For evolution questions, present the answer as a numbered timeline.\n\n"
+
+        "Use headings and numbered points where appropriate.\n"
+        "If the answer is not available in the provided context, clearly state that.\n"
     )
 
     user_prompt = (
         f"Recent conversation:\n{history_text}\n\n"
-        f"Context:\n{context}\n\nQuestion: {state['query']}"
+        f"Context:\n{context}\n\n"
+        f"Current Question: {state['query']}\n\n"
+        "If this is a follow-up request such as "
+        "'more theory', 'expand', or 'elaborate', "
+        "expand the previously discussed topic only."
     )
 
     response = state["client"].chat.completions.create(
