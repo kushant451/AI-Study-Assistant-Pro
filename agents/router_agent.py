@@ -125,15 +125,17 @@ def route_query(client, query, has_documents, chat_history):
 def _doc_qa(client, query, embedder, index, chunks, chat_history):
 
     retrieved = search(query, embedder, index, chunks, top_k=3)
-    print("\n========== QUERY ==========")
-    print(query)
 
-    print("\n========== RETRIEVED ==========")
+    print("\n====================")
+    print("QUERY:", query)
+    print("====================")
+
     for i, chunk in enumerate(retrieved):
-        print(f"\n--- Chunk {i+1} ---")
-        print(str(chunk)[:1000])
-        context = build_context_with_citations(retrieved)
-        history_text = format_history(chat_history)
+        print(f"\n--- CHUNK {i+1} ---")
+        print(chunk)
+
+    context = build_context_with_citations(retrieved)
+    history_text = format_history(chat_history)
 
     system_prompt = """
 You are an expert university-level study assistant.
