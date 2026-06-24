@@ -88,6 +88,7 @@ def summarize(client, chunks, style="brief", query=""):
 
 
     batch_size = 10
+    print("BATCH SIZE:", batch_size)
 
     chunk_batches = [
         chunks[i:i + batch_size]
