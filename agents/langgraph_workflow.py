@@ -42,32 +42,37 @@ def doc_qa_node(state: AgentState) -> dict:
         state["embedder"],
         state["index"],
         state["chunks"],
-        top_k=3,
+        top_k=5,
     )
     context = build_context_with_citations(retrieved)
     history_text = format_history(state["chat_history"])
 
-    system_prompt = (
-        "You are an expert academic study assistant.\n\n"
+    system_prompt = """
+        You are an expert academic study assistant.
 
-        "Answer exactly what the user asks.\n"
-        "Provide detailed, exam-oriented explanations using only the provided context.\n\n"
+        Answer only from the provided context.
 
-        "If the user asks 'more theory', 'expand', 'elaborate', "
-        "or another follow-up question, expand ONLY the topic discussed in the previous answer.\n"
+        If the user asks a follow-up request such as:
+        - more theory
+        - elaborate
+        - explain more
+        - expand
+        - more details
 
-        "Do NOT introduce new topics from the document.\n"
-        "Do NOT jump to other chapters.\n"
-        "Do NOT explain related concepts unless explicitly requested.\n\n"
+        then continue the SAME topic discussed in the previous answer.
 
-        "If the user asks about evolution, history, phases, development, "
-        "or lifecycle of a topic, explain ONLY the chronological evolution.\n"
+        Do not introduce unrelated topics from the document.
 
-        "For evolution questions, present the answer as a numbered timeline.\n\n"
+        For example:
+        If previous answer was about SAP modules,
+        then 'add more theory' should expand SAP modules only.
 
-        "Use headings and numbered points where appropriate.\n"
-        "If the answer is not available in the provided context, clearly state that.\n"
-    )
+        If previous answer was about ERP evolution,
+        then 'add more theory' should expand ERP evolution only.
+
+        Use headings and bullet points.
+        Provide exam-oriented explanations.
+        """
 
     user_prompt = (
         f"Recent conversation:\n{history_text}\n\n"
