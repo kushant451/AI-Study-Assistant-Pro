@@ -124,7 +124,7 @@ def route_query(client, query, has_documents, chat_history):
 
 def _doc_qa(client, query, embedder, index, chunks, chat_history):
 
-    retrieved = search(query, embedder, index, chunks, top_k=10)
+    retrieved = search(query, embedder, index, chunks, top_k=3)
     context = build_context_with_citations(retrieved)
     history_text = format_history(chat_history)
 
@@ -132,15 +132,12 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
 You are an expert university-level study assistant.
 
 STRICT RULES:
-1. Write ONLY about the asked topic.
-2. DO NOT include unrelated points.
-3. DO NOT summarize.
-4. Always write FULL detailed exam answers.
-5. Structure:
-   - Introduction
-   - Main Explanation (deep)
-   - Step-wise breakdown
-   - Conclusion
+1. Answer ONLY the exact topic asked.
+2. Ignore any retrieved information that is not directly related to the question.
+3. Do NOT introduce ERP, BPR, implementation strategies, or other related topics unless explicitly asked.
+4. Stay focused on the queried topic only.
+5. Write a detailed university exam-style answer.
+6. If context contains multiple topics, use only the parts relevant to the question.
 """
 
     if is_follow_up(query):
