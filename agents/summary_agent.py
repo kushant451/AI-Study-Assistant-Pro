@@ -87,7 +87,7 @@ def summarize(client, chunks, style="brief", query=""):
     print("BATCH MODE ACTIVE")
 
 
-    batch_size = 10
+    batch_size = 15
     print("BATCH SIZE:", batch_size)
 
     chunk_batches = [
@@ -117,7 +117,7 @@ def summarize(client, chunks, style="brief", query=""):
         batch_system_prompt = """
         Summarize this section.
         Capture important headings and concepts.
-        Maximum 150 words.
+        Maximum 80 words.
         """
 
         response = client.chat.completions.create(
@@ -141,8 +141,7 @@ def summarize(client, chunks, style="brief", query=""):
     combined_summary = "\n\n".join(batch_summaries)
 
     final_prompt = f"""
-    Combine the following partial summaries into one complete,
-    well-structured study note.
+    Create concise study notes from:
 
     {combined_summary}
     """
