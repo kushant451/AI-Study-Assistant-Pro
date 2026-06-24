@@ -95,7 +95,12 @@ def doc_qa_node(state: AgentState) -> dict:
 
 def summarize_node(state: AgentState) -> dict:
     style = detect_style(state["query"])
-    answer = summarize(state["client"], state["chunks"], style=style)
+    answer = summarize(
+    state["client"],
+    state["chunks"],
+    style=style,
+    query=state["query"]
+)
     return {"answer": answer, "extra": None}
 
 
