@@ -126,14 +126,15 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
     if is_follow_up(query):
         for msg in reversed(chat_history):
             if msg["role"] == "user" and not is_follow_up(msg["content"]):
-                query = (
-    f"Expand each point in detail for the topic: {msg['content']}. "
-    f"For every point, explain concept, working, importance, advantages, "
-    f"and practical usage. Do not introduce new topics."
-)
+                query = msg["content"]
                 break
 
-    retrieved = search(query, embedder, index, chunks, top_k=5)
+    retrieved = search(query, embedder, index, chunks, top_k=1)
+    retrieved = [
+    r for r in retrieved
+    if "business process re-engineering" not in r["text"].lower()
+    and "bpr" not in r["text"].lower()
+]
 
     print("\n====================")
     print("QUERY:", query)
