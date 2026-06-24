@@ -6,6 +6,9 @@ Create complete university exam notes from the document.
 Requirements:
 
 - Cover ALL topics from the document.
+- Do not skip any chapter.
+- Include all major headings found in the document.
+- If the document has multiple units, summarize every unit.
 - Use numbered main headings.
 - Under every heading provide 3-5 subpoints.
 - Expand every subpoint in 2-4 lines.
@@ -39,7 +42,13 @@ from rag.citation_engine import chunks_to_plain_text
 
 def detect_style(query):
     query_lower = query.lower()
-
+    if any(word in query_lower for word in [
+        "full pdf summary",
+        "summarize entire pdf",
+        "summarize complete pdf",
+        "complete pdf summary"
+    ]):
+        return "detailed"
     if any(word in query_lower for word in [
         "detail",
         "detailed",
@@ -69,13 +78,10 @@ def detect_style(query):
 
 def summarize(client, chunks, style="brief", query=""):
 
-    if style == "detailed":
-        context = chunks_to_plain_text(
-            chunks,
-            limit=min(len(chunks), 20)
-        )
-    else:
-        context = chunks_to_plain_text(chunks, limit=10)
+    context = chunks_to_plain_text(
+        chunks,
+        limit=len(chunks)
+    )
 
     system_prompt = STYLE_PROMPTS.get(style, STYLE_PROMPTS["brief"])
 
