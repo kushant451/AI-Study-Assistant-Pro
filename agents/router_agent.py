@@ -161,14 +161,29 @@ RULES:
    - Example (if relevant)
 6. Do not introduce unrelated topics such as ERP, BPR, or implementation strategies unless explicitly asked.
 7. Write in detailed university exam format.
+8. Every answer must be detailed enough for a 10-mark university examination.
+9. Use numbered main points with 3-5 subpoints under each point.
+10. Expand each point academically and clearly.
 
 STRUCTURE:
 - Introduction
-- Detailed Explanation of Each Point
-- Importance
-- Advantages
-- Example (if relevant)
+- Main Points
+- Each Main Point must contain 3-5 subpoints
 - Conclusion
+
+EXAM FORMAT:
+
+1. Main Point
+   - Subpoint
+   - Subpoint
+   - Subpoint
+   - Subpoint
+
+2. Main Point
+   - Subpoint
+   - Subpoint
+   - Subpoint
+   - Subpoint
 """
 
     user_prompt = (
