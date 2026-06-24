@@ -125,8 +125,15 @@ def route_query(client, query, has_documents, chat_history):
 def _doc_qa(client, query, embedder, index, chunks, chat_history):
 
     retrieved = search(query, embedder, index, chunks, top_k=3)
-    context = build_context_with_citations(retrieved)
-    history_text = format_history(chat_history)
+    print("\n========== QUERY ==========")
+    print(query)
+
+    print("\n========== RETRIEVED ==========")
+    for i, chunk in enumerate(retrieved):
+        print(f"\n--- Chunk {i+1} ---")
+        print(str(chunk)[:1000])
+        context = build_context_with_citations(retrieved)
+        history_text = format_history(chat_history)
 
     system_prompt = """
 You are an expert university-level study assistant.
@@ -141,12 +148,13 @@ STRICT RULES:
 """
 
     if is_follow_up(query):
-        query = (
-        "Continue explaining ONLY the previously discussed topic. "
-        "Do not introduce new topics. "
-        + query
-    )
-
+        for msg in reversed(chat_history):
+            if msg["role"] == "user" and not is_follow_up(msg["content"]):
+                query = (
+                    f"Provide additional theory ONLY about: {msg['content']}. "
+                    f"Do not introduce ERP, BPR, implementation approaches, or other related topics."
+                )
+                break
     user_prompt = (
         f"Recent conversation:\n{history_text}\n\n"
         f"Document Context:\n{context}\n\n"
