@@ -44,7 +44,7 @@ IMPORTANT:
 - Stop only after all topics are covered.
 """
 }
-from rag.citation_engine import chunks_to_plain_text
+# move import inside function to avoid circular import
 
 
 def detect_style(query):
@@ -78,12 +78,12 @@ def detect_style(query):
         "important points",
         "key points"
     ]):
-        return "exam"
+        return "detailed"
 
     return "brief"
 
-
 def summarize(client, chunks, style="brief", query=""):
+    from rag.citation_engine import chunks_to_plain_text
     print("BATCH MODE ACTIVE")
 
 
