@@ -1,115 +1,106 @@
 import time
 
-STYLE_PROMPTS = {
-    "brief": "Summarize the following study material in 3-4 short bullet points, covering only the most important ideas.",
-    "detailed": """
-Create complete university exam notes from the document.
-
-Requirements:
-- Cover ALL topics from the document.
-- Do not skip any chapter.
-- Include all major headings.
-- Preserve chapter-wise structure.
-- Include definitions, features, advantages, disadvantages, applications and examples.
-- Do NOT copy text directly.
-- Write exam-ready answers (10/15 marks).
-"""
-}
+# ── Citation engine ───────────────────────────────────────────
 
 
-def detect_style(query):
-    query_lower = query.lower()
-
-    if any(word in query_lower for word in [
-        "full pdf summary",
-        "complete pdf summary",
-        "summarize entire pdf"
-    ]):
-        return "detailed"
-
-    if any(word in query_lower for word in [
-        "detail", "detailed", "in depth", "elaborate",
-        "full summary", "long summary"
-    ]):
-        return "detailed"
-
-    if any(word in query_lower for word in [
-        "exam", "revision", "important points", "key points"
-    ]):
-        return "brief"
-
-    return "brief"
+def chunks_to_plain_text(chunks, limit=5):
+    """Convert chunks to plain text for summarization."""
+    texts = []
+    for chunk in chunks[:limit]:
+        if isinstance(chunk, dict):
+            texts.append(chunk.get("text", ""))
+        elif hasattr(chunk, "text"):
+            texts.append(chunk.text)
+        else:
+            texts.append(str(chunk))
+    return "\n\n".join(texts)
 
 
-def summarize(client, chunks, style="brief", query=""):
+def build_context_with_citations(chunks):
+    """Build context string with citation markers."""
+    parts = []
+    for i, chunk in enumerate(chunks):
+        if isinstance(chunk, dict):
+            text = chunk.get("text", "")
+            source = chunk.get("source", f"Source {i+1}")
+        elif hasattr(chunk, "text"):
+            text = chunk.text
+            source = getattr(chunk, "source", f"Source {i+1}")
+        else:
+            text = str(chunk)
+            source = f"Source {i+1}"
+        parts.append(f"[{i+1}] ({source})\n{text}")
+    return "\n\n".join(parts)
 
-    from rag.citation_engine import chunks_to_plain_text
 
-    print("BATCH MODE ACTIVE")
+def format_citations_for_display(chunks):
+    """Format citations for display in the UI."""
+    citations = []
+    for i, chunk in enumerate(chunks):
+        if isinstance(chunk, dict):
+            source = chunk.get("source", f"Source {i+1}")
+            page = chunk.get("page", None)
+        elif hasattr(chunk, "source"):
+            source = chunk.source
+            page = getattr(chunk, "page", None)
+        else:
+            source = f"Source {i+1}"
+            page = None
 
-    # auto style detection
-    if query:
-        style = detect_style(query)
+        citation = f"[{i+1}] {source}"
+        if page:
+            citation += f", page {page}"
+        citations.append(citation)
+    return citations
 
-    system_prompt = STYLE_PROMPTS.get(style, STYLE_PROMPTS["brief"])
 
-    batch_size = 10
-    chunk_batches = [
-        chunks[i:i + batch_size]
-        for i in range(0, len(chunks), batch_size)
-    ]
+def confidence_label(chunks):
+    """Return a confidence label based on number of retrieved chunks."""
+    if not chunks:
+        return "Low"
+    if len(chunks) >= 5:
+        return "High"
+    if len(chunks) >= 3:
+        return "Medium"
+    return "Low"
 
-    batch_summaries = []
 
-    for batch in chunk_batches:
+# ── Groq-based citation answering ────────────────────────────
 
-        context = chunks_to_plain_text(batch, limit=len(batch))
 
-        user_prompt = f"""
-User Request:
-{query}
+def answer_with_citations(client, query, chunks, chat_history=None):
+    """Answer a query using chunks with citation support."""
+    context = build_context_with_citations(chunks)
+    context = context[:2000]  # hard cap
 
-Material:
-{context}
-"""
+    history_text = "(no previous messages)"
+    if chat_history:
+        lines = []
+        for msg in chat_history[-3:]:
+            role = "User" if msg["role"] == "user" else "Assistant"
+            lines.append(f"{role}: {msg['content'][:150]}")
+        history_text = "\n".join(lines)
 
-        batch_system_prompt = system_prompt  # IMPORTANT FIX
+    system_prompt = (
+        "You are a university study assistant. "
+        "Answer using only the document context provided. "
+        "Be clear and concise."
+    )
 
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": batch_system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.3,
-        )
-
-        batch_summaries.append(response.choices[0].message.content)
-
-        time.sleep(1.2)
-
-    print("STYLE SELECTED:", style)
-
-    combined_summary = "\n\n".join(batch_summaries)
-
-    final_prompt = f"""
-Combine all section-wise summaries into one complete, structured, exam-ready document.
-
-Do NOT skip any topic.
-
-CONTENT:
-{combined_summary}
-"""
+    user_prompt = (
+        f"Recent conversation:\n{history_text}\n\n"
+        f"Document Context:\n{context}\n\n"
+        f"Question: {query[:300]}"
+    )
 
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": final_prompt},
+            {"role": "user",   "content": user_prompt},
         ],
-        temperature=0.3,
+        temperature=0.1,
+        max_tokens=600,
     )
-
-    print("summary_agent loaded successfully")
 
     return response.choices[0].message.content
