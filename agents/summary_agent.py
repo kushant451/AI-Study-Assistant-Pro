@@ -1,86 +1,80 @@
 import time
 from groq import RateLimitError
 
+# ── Shorten the detailed prompt significantly ──────────────
 STYLE_PROMPTS = {
-    "brief": (
-        "Summarize the following study material in 3-4 short bullet points, "
-        "covering only the most important ideas."
-    ),
+    "brief": "Summarize in 3-4 bullet points covering only key ideas.",
 
-    "detailed": """
-Create university exam notes.
-
-Requirements:
-- Cover all important topics.
-- Use numbered headings.
-- Provide 3-5 key points per heading.
-- Include definitions, features, advantages,
-  disadvantages and applications where relevant.
-- Preserve topic-wise structure.
-- Rewrite as study notes.
-- Avoid repetition.
-- Keep concise but complete.
-
-Format:
-
-1. Topic Name
-   - Point 1
-   - Point 2
-   - Point 3
-
-2. Topic Name
-   - Point 1
-   - Point 2
-   - Point 3
-"""
+    "detailed": (
+        "Create concise exam notes. Use numbered headings. "
+        "3-5 bullet points each. Include definitions, pros/cons, uses. "
+        "No repetition. Be brief but complete."
+    )
 }
+
+# ── Token constants (llama-3.1-8b-instant on Groq free tier) ──
+TPM_HARD_LIMIT   = 6000
+OUTPUT_TOKENS    = 180   # tokens reserved for output
+PROMPT_OVERHEAD  = 120   # tokens for system prompt + scaffolding
+MAX_INPUT_TOKENS = TPM_HARD_LIMIT - OUTPUT_TOKENS - PROMPT_OVERHEAD  # = 5700
+MAX_CONTEXT_CHARS = MAX_INPUT_TOKENS * 3  # conservative: 3 chars/token → 17100
+MAX_CONTEXT_CHARS = min(MAX_CONTEXT_CHARS, 350)  # absolute hard cap
 
 
 def detect_style(query):
     query_lower = query.lower()
-
-    if any(word in query_lower for word in [
-        "full pdf summary",
-        "summarize entire pdf",
-        "summarize complete pdf",
-        "complete pdf summary"
-    ]):
-        return "detailed"
-
-    if any(word in query_lower for word in [
-        "detail", "detailed", "in depth", "elaborate",
-        "full summary", "complete summary", "entire pdf",
-        "whole pdf", "more summary", "expand summary",
-        "detailed summary", "long summary"
-    ]):
-        return "detailed"
-
-    if any(word in query_lower for word in [
+    detailed_keywords = [
+        "full pdf summary", "summarize entire pdf", "summarize complete pdf",
+        "complete pdf summary", "detail", "detailed", "in depth", "elaborate",
+        "full summary", "complete summary", "entire pdf", "whole pdf",
+        "more summary", "expand summary", "detailed summary", "long summary",
         "exam", "revision", "important points", "key points"
-    ]):
+    ]
+    if any(word in query_lower for word in detailed_keywords):
         return "detailed"
-
     return "brief"
 
 
-def estimate_tokens(text):
-    """Rough estimate: 1 token ≈ 4 characters."""
-    return len(text) // 4
+def count_tokens_approx(text):
+    """Conservative estimate: 1 token per 3 chars."""
+    return len(text) // 3
+
+
+def safe_trim(text, max_tokens):
+    """Trim text to fit within max_tokens (approx)."""
+    max_chars = max_tokens * 3
+    return text[:max_chars]
 
 
 def groq_call(client, **kwargs):
-    retries = 5
-
-    for attempt in range(retries):
+    """Call Groq with exponential backoff on rate limit."""
+    for attempt in range(6):
         try:
             return client.chat.completions.create(**kwargs)
-
         except RateLimitError:
-            wait_time = min(4 * (attempt + 1), 30)  # longer waits
-            print(f"Rate limit hit. Retry {attempt + 1}/{retries}. Waiting {wait_time}s...")
-            time.sleep(wait_time)
+            wait = min(5 * (attempt + 1), 30)
+            print(f"[GROQ] Rate limit. Retry {attempt+1}/6 in {wait}s...")
+            time.sleep(wait)
+    raise Exception("Groq API rate limit exceeded after all retries.")
 
-    raise Exception("Groq API rate limit exceeded after retries")
+
+def build_and_validate_messages(system_prompt, user_prompt, max_tokens_out):
+    """
+    Build messages dict and verify total token estimate is under limit.
+    Returns messages dict, or raises if still too large.
+    """
+    total_est = count_tokens_approx(system_prompt + user_prompt) + max_tokens_out
+    print(f"  [TOKEN CHECK] Estimated total: {total_est} / {TPM_HARD_LIMIT}")
+
+    if total_est > TPM_HARD_LIMIT:
+        raise ValueError(
+            f"Request still too large: ~{total_est} tokens estimated. "
+            f"Reduce context further."
+        )
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user",   "content": user_prompt},
+    ]
 
 
 def summarize(client, chunks, style="brief", query=""):
@@ -89,121 +83,105 @@ def summarize(client, chunks, style="brief", query=""):
 
     print("=" * 60)
     print("SUMMARY AGENT STARTED")
+    print(f"  Style: {style} | Chunks: {len(chunks)}")
+    print(f"  Max context chars/batch: {MAX_CONTEXT_CHARS}")
     print("=" * 60)
-
-    batch_size = 1
-
-    chunk_batches = [
-        chunks[i:i + batch_size]
-        for i in range(0, len(chunks), batch_size)
-    ]
-
-    batch_summaries = []
 
     system_prompt = STYLE_PROMPTS.get(style, STYLE_PROMPTS["brief"])
 
-    # ── Token budget ──────────────────────────────────────────
-    TPM_LIMIT        = 6000
-    SAFETY_MARGIN    = 1000          # headroom for prompt scaffolding
-    MAX_TOKENS_OUT   = 200           # output tokens per batch call
-    CONTEXT_TOKEN_BUDGET = TPM_LIMIT - SAFETY_MARGIN - MAX_TOKENS_OUT
-    MAX_CONTEXT_CHARS    = CONTEXT_TOKEN_BUDGET * 4  # ≈ 4 chars/token → ~1900
-    MAX_CONTEXT_CHARS    = min(MAX_CONTEXT_CHARS, 400)  # hard cap at 400 chars
-    # ─────────────────────────────────────────────────────────
+    # Trim query so it never contributes too many tokens
+    query_trimmed = query[:200]
 
-    print("STYLE SELECTED:", style)
-    print("TOTAL CHUNKS:", len(chunks))
-    print("TOTAL BATCHES:", len(chunk_batches))
-    print("MAX CONTEXT CHARS PER BATCH:", MAX_CONTEXT_CHARS)
+    batch_summaries = []
 
     # =====================================================
-    # STEP 1: SUMMARIZE EACH BATCH
+    # STEP 1: Summarise each chunk individually
     # =====================================================
-    for idx, batch in enumerate(chunk_batches):
+    for idx, chunk in enumerate(chunks):
+        print(f"\n[BATCH {idx+1}/{len(chunks)}]")
+        time.sleep(4)  # spread calls across the minute
 
-        print(f"Processing batch {idx + 1}/{len(chunk_batches)}")
+        # Get raw text and hard-trim
+        context = chunks_to_plain_text([chunk], limit=1)
+        context = safe_trim(context, max_tokens=300)  # 300 tokens max for context
 
-        time.sleep(3)  # increased sleep to stay under TPM
+        user_prompt = (
+            f"Request: {query_trimmed}\n\n"
+            f"Material:\n{context}"
+        )
 
-        context = chunks_to_plain_text(batch, limit=len(batch))
-        context = context[:MAX_CONTEXT_CHARS]  # safe trim
+        print(f"  context chars={len(context)} | user_prompt chars={len(user_prompt)}")
 
-        user_prompt = f"User Request:\n{query}\n\nMaterial:\n{context}"
-
-        # Pre-flight token check
-        estimated = estimate_tokens(system_prompt + user_prompt)
-        print(f"Estimated input tokens: {estimated}")
-
-        if estimated + MAX_TOKENS_OUT > TPM_LIMIT:
-            # Trim context further if still too large
-            overage_chars = (estimated + MAX_TOKENS_OUT - TPM_LIMIT) * 4
-            context = context[:max(100, len(context) - overage_chars)]
-            user_prompt = f"User Request:\n{query}\n\nMaterial:\n{context}"
-            print(f"Trimmed context to {len(context)} chars after pre-flight check")
+        try:
+            messages = build_and_validate_messages(system_prompt, user_prompt, OUTPUT_TOKENS)
+        except ValueError as e:
+            print(f"  [SKIP] {e}")
+            continue
 
         response = groq_call(
             client,
             model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            messages=messages,
             temperature=0.3,
-            max_tokens=MAX_TOKENS_OUT
+            max_tokens=OUTPUT_TOKENS,
         )
 
         try:
-            print("USAGE:", response.usage)
+            print(f"  [USAGE] {response.usage}")
         except Exception:
             pass
 
-        summary_text = response.choices[0].message.content[:800]
-        batch_summaries.append(summary_text)
+        text = response.choices[0].message.content
+        # Trim output too so merge step stays safe
+        batch_summaries.append(text[:600])
+
+    if not batch_summaries:
+        return "No content could be summarised (all chunks were too large)."
 
     # =====================================================
-    # STEP 2: MERGE BATCH SUMMARIES
+    # STEP 2: Merge all batch summaries into final notes
     # =====================================================
+    print("\n[MERGE STEP]")
+    time.sleep(4)
 
-    combined_summary = "\n\n".join(batch_summaries)
+    # Each batch summary was capped at 600 chars.
+    # Fit as many as possible within merge budget.
+    merge_token_budget = TPM_HARD_LIMIT - OUTPUT_TOKENS - PROMPT_OVERHEAD
+    combined = ""
+    for s in batch_summaries:
+        candidate = combined + "\n\n" + s if combined else s
+        if count_tokens_approx(candidate) <= merge_token_budget:
+            combined = candidate
+        else:
+            print("  [MERGE] Token budget reached — dropping remaining summaries.")
+            break
 
-    # Keep merge input well under TPM
-    MAX_MERGE_CHARS = 1600  # reduced from 2500
-    combined_summary = combined_summary[:MAX_MERGE_CHARS]
+    print(f"  Combined length: {len(combined)} chars")
 
-    print("AFTER MERGE LENGTH:", len(combined_summary))
-
-    final_prompt = (
-        "You are given section-wise summaries of a document.\n\n"
-        "TASK:\n"
-        "- Merge into clean study notes\n"
-        "- Remove duplicates\n"
-        "- Keep structure\n"
-        "- Be concise and exam-friendly\n\n"
-        f"CONTENT:\n{combined_summary}"
+    merge_prompt = (
+        "Merge these section summaries into clean, exam-friendly study notes. "
+        "Remove duplicates. Keep structure. Be concise.\n\n"
+        f"CONTENT:\n{combined}"
     )
 
-    # Pre-flight for merge call
-    merge_estimated = estimate_tokens(system_prompt + final_prompt)
-    print(f"Merge estimated input tokens: {merge_estimated}")
-
-    time.sleep(3)  # wait before merge call too
+    try:
+        messages = build_and_validate_messages(system_prompt, merge_prompt, OUTPUT_TOKENS)
+    except ValueError as e:
+        print(f"  [MERGE FALLBACK] {e} — returning combined summaries directly.")
+        return combined
 
     response = groq_call(
         client,
         model="llama-3.1-8b-instant",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": final_prompt},
-        ],
+        messages=messages,
         temperature=0.3,
-        max_tokens=500  # reduced from 600
+        max_tokens=OUTPUT_TOKENS,
     )
 
     try:
-        print("FINAL USAGE:", response.usage)
+        print(f"  [FINAL USAGE] {response.usage}")
     except Exception:
         pass
 
-    print("SUMMARY COMPLETE")
-
+    print("\nSUMMARY COMPLETE")
     return response.choices[0].message.content
