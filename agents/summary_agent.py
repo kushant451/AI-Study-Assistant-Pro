@@ -83,11 +83,13 @@ def detect_style(query):
     return "brief"
 
 def summarize(client, chunks, style="brief", query=""):
-    from rag.citation_engine import chunks_to_plain_text
+
+    from rag.citation_engine import chunks_to_plain_text  # moved inside
+
     print("BATCH MODE ACTIVE")
 
 
-    batch_size = 10
+    batch_size = 4
 
     chunk_batches = [
         chunks[i:i + batch_size]
@@ -99,7 +101,10 @@ def summarize(client, chunks, style="brief", query=""):
     system_prompt = STYLE_PROMPTS.get(style, STYLE_PROMPTS["brief"])
 
     for batch in chunk_batches:
-        
+        response = client.chat.completions.create(...)
+
+        time.sleep(1.2)   # prevents burst
+            
 
         context = chunks_to_plain_text(
             batch,
@@ -137,7 +142,7 @@ def summarize(client, chunks, style="brief", query=""):
     print("STYLE SELECTED:", style)
 
 
-    combined_summary = "\n\n".join(batch_summaries)
+    combined_summary = "\n\n".join(batch_summaries[:6])
 
     final_prompt = f"""
     Combine the following partial summaries into one complete,
