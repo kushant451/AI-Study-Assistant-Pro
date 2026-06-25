@@ -11,10 +11,10 @@ STYLE_PROMPTS = {
     )
 }
 
-TPM_HARD_LIMIT    = 6000
-OUTPUT_TOKENS     = 180
-PROMPT_OVERHEAD   = 120
-MAX_CONTEXT_CHARS = 350
+TPM_HARD_LIMIT  = 6000
+OUTPUT_TOKENS   = 150
+PROMPT_OVERHEAD = 100
+MAX_CHUNKS      = 5   # only process top 5 chunks max
 
 
 def detect_style(query):
@@ -35,16 +35,13 @@ def count_tokens_approx(text):
     return len(text) // 3
 
 
-def safe_trim(text, max_tokens):
-    return text[:max_tokens * 3]
+def safe_trim(text, max_chars):
+    return text[:max_chars]
 
 
 def extract_wait_time(error_message):
-    """Extract suggested wait time from Groq error message."""
     match = re.search(r'try again in ([0-9.]+)s', str(error_message))
-    if match:
-        return float(match.group(1)) + 1.0  # add 1s buffer
-    return 10.0  # default fallback
+    return float(match.group(1)) + 2.0 if match else 12.0
 
 
 def groq_call(client, **kwargs):
@@ -52,22 +49,10 @@ def groq_call(client, **kwargs):
         try:
             return client.chat.completions.create(**kwargs)
         except RateLimitError as e:
-            wait = extract_wait_time(e)
-            wait = max(wait, 3.0)  # always wait at least 3s
+            wait = max(extract_wait_time(e), 5.0)
             print(f"[GROQ] Rate limit. Retry {attempt+1}/8 in {wait:.1f}s...")
             time.sleep(wait)
     raise Exception("Groq API rate limit exceeded after all retries.")
-
-
-def build_and_validate_messages(system_prompt, user_prompt, max_tokens_out):
-    total_est = count_tokens_approx(system_prompt + user_prompt) + max_tokens_out
-    print(f"  [TOKEN CHECK] ~{total_est} / {TPM_HARD_LIMIT}")
-    if total_est > TPM_HARD_LIMIT:
-        raise ValueError(f"Too large: ~{total_est} tokens.")
-    return [
-        {"role": "system", "content": system_prompt},
-        {"role": "user",   "content": user_prompt},
-    ]
 
 
 def summarize(client, chunks, style="brief", query=""):
@@ -75,31 +60,43 @@ def summarize(client, chunks, style="brief", query=""):
 
     print("=" * 60)
     print("SUMMARY AGENT STARTED")
-    print(f"  Style: {style} | Chunks: {len(chunks)}")
+    print(f"  Style: {style} | Total chunks: {len(chunks)}")
+
+    # ── HARD LIMIT: only process first MAX_CHUNKS chunks ──
+    chunks = chunks[:MAX_CHUNKS]
+    print(f"  Processing: {len(chunks)} chunks (capped at {MAX_CHUNKS})")
     print("=" * 60)
 
     system_prompt = STYLE_PROMPTS.get(style, STYLE_PROMPTS["brief"])
-    query_trimmed = query[:200]
+    query_trimmed = query[:150]
     batch_summaries = []
 
+    # =====================================================
+    # STEP 1: Summarise each chunk
+    # =====================================================
     for idx, chunk in enumerate(chunks):
         print(f"\n[BATCH {idx+1}/{len(chunks)}]")
-        time.sleep(12)  # 12s gap = max ~5 calls/min, safe under 6000 TPM
+        time.sleep(10)
 
         context = chunks_to_plain_text([chunk], limit=1)
-        context = safe_trim(context, max_tokens=250)
+        context = safe_trim(context, 200)  # 200 chars max ≈ 65 tokens
+
         user_prompt = f"Request: {query_trimmed}\n\nMaterial:\n{context}"
 
-        try:
-            messages = build_and_validate_messages(system_prompt, user_prompt, OUTPUT_TOKENS)
-        except ValueError as e:
-            print(f"  [SKIP] {e}")
+        total_est = count_tokens_approx(system_prompt + user_prompt) + OUTPUT_TOKENS
+        print(f"  [TOKEN CHECK] ~{total_est} / {TPM_HARD_LIMIT}")
+
+        if total_est > TPM_HARD_LIMIT:
+            print(f"  [SKIP] Too large: {total_est} tokens")
             continue
 
         response = groq_call(
             client,
             model="llama-3.1-8b-instant",
-            messages=messages,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_prompt},
+            ],
             temperature=0.3,
             max_tokens=OUTPUT_TOKENS,
         )
@@ -109,40 +106,42 @@ def summarize(client, chunks, style="brief", query=""):
         except Exception:
             pass
 
-        batch_summaries.append(response.choices[0].message.content[:600])
+        batch_summaries.append(response.choices[0].message.content[:400])
 
     if not batch_summaries:
-        return "No content could be summarised (all chunks were too large)."
+        return "No content could be summarised."
 
+    # =====================================================
+    # STEP 2: Merge — strictly cap combined input
+    # =====================================================
     print("\n[MERGE STEP]")
-    time.sleep(12)
+    time.sleep(10)
 
-    merge_token_budget = TPM_HARD_LIMIT - OUTPUT_TOKENS - PROMPT_OVERHEAD
-    combined = ""
-    for s in batch_summaries:
-        candidate = combined + "\n\n" + s if combined else s
-        if count_tokens_approx(candidate) <= merge_token_budget:
-            combined = candidate
-        else:
-            print("  [MERGE] Budget reached — stopping.")
-            break
+    # Each summary ~400 chars, 5 summaries = 2000 chars = ~666 tokens
+    # + system + merge prompt overhead = well under 6000
+    combined = "\n\n".join(batch_summaries)
+    combined = safe_trim(combined, 1500)  # absolute cap: 1500 chars ≈ 500 tokens
 
     merge_prompt = (
-        "Merge these summaries into clean exam-friendly study notes. "
+        "Merge into clean exam-friendly study notes. "
         "Remove duplicates. Keep structure. Be concise.\n\n"
         f"CONTENT:\n{combined}"
     )
 
-    try:
-        messages = build_and_validate_messages(system_prompt, merge_prompt, OUTPUT_TOKENS)
-    except ValueError as e:
-        print(f"  [MERGE FALLBACK] {e}")
+    total_est = count_tokens_approx(system_prompt + merge_prompt) + OUTPUT_TOKENS
+    print(f"  [MERGE TOKEN CHECK] ~{total_est} / {TPM_HARD_LIMIT}")
+
+    if total_est > TPM_HARD_LIMIT:
+        print("  [MERGE FALLBACK] Returning combined directly.")
         return combined
 
     response = groq_call(
         client,
         model="llama-3.1-8b-instant",
-        messages=messages,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": merge_prompt},
+        ],
         temperature=0.3,
         max_tokens=OUTPUT_TOKENS,
     )
