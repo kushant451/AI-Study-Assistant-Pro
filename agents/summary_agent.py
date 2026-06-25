@@ -75,10 +75,6 @@ def detect_style(query):
 
 
 def groq_call(client, **kwargs):
-    """
-    Retry automatically when Groq returns a rate-limit error.
-    """
-
     retries = 5
 
     for attempt in range(retries):
@@ -87,13 +83,7 @@ def groq_call(client, **kwargs):
 
         except RateLimitError:
             wait_time = min(2 * (attempt + 1), 10)
-
-            print(
-                f"Rate limit hit. "
-                f"Retry {attempt + 1}/{retries}. "
-                f"Waiting {wait_time}s..."
-            )
-
+            print(f"Rate limit hit. Retry {attempt + 1}/{retries}. Waiting {wait_time}s...")
             time.sleep(wait_time)
 
     raise Exception("Groq API rate limit exceeded after retries")
@@ -107,7 +97,8 @@ def summarize(client, chunks, style="brief", query=""):
     print("SUMMARY AGENT STARTED")
     print("=" * 60)
 
-    batch_size = 2
+    # 🔥 safer batching (important for TPM)
+    batch_size = 1
 
     chunk_batches = [
         chunks[i:i + batch_size]
@@ -116,10 +107,7 @@ def summarize(client, chunks, style="brief", query=""):
 
     batch_summaries = []
 
-    system_prompt = STYLE_PROMPTS.get(
-        style,
-        STYLE_PROMPTS["brief"]
-    )
+    system_prompt = STYLE_PROMPTS.get(style, STYLE_PROMPTS["brief"])
 
     print("STYLE SELECTED:", style)
     print("TOTAL CHUNKS:", len(chunks))
@@ -128,23 +116,16 @@ def summarize(client, chunks, style="brief", query=""):
     # =====================================================
     # STEP 1: SUMMARIZE EACH BATCH
     # =====================================================
-
     for idx, batch in enumerate(chunk_batches):
 
-        print(
-            f"Processing batch "
-            f"{idx + 1}/{len(chunk_batches)}"
-        )
+        print(f"Processing batch {idx + 1}/{len(chunk_batches)}")
 
         time.sleep(1)
 
-        context = chunks_to_plain_text(
-            batch,
-            limit=len(batch)
-        )
+        context = chunks_to_plain_text(batch, limit=len(batch))
 
-        # Reduced from 6000 -> 2000
-        context = context[:2000]
+        # 🔥 strict limit (important)
+        context = context[:800]
 
         user_prompt = f"""
 User Request:
@@ -161,14 +142,8 @@ Material:
             client,
             model="llama-3.1-8b-instant",
             messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": user_prompt
-                },
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
             temperature=0.3,
             max_tokens=250
@@ -179,65 +154,47 @@ Material:
         except Exception:
             pass
 
-        summary_text = (
-            response.choices[0]
-            .message.content
-        )
+        summary_text = response.choices[0].message.content
 
-        # Limit size of each batch summary
-        summary_text = summary_text[:1200]
+        # limit each batch output
+        summary_text = summary_text[:1000]
 
         batch_summaries.append(summary_text)
 
     # =====================================================
-    # STEP 2: MERGE BATCH SUMMARIES
+    # STEP 2: MERGE BATCH SUMMARIES (FIXED)
     # =====================================================
 
     combined_summary = "\n\n".join(batch_summaries)
-    print("BEFORE TRUNCATION:", len(combined_summary))
 
-    MAX_MERGE_CHARS = 5000
-
+    # 🔥 safety trim
+    MAX_MERGE_CHARS = 2500
     combined_summary = combined_summary[:MAX_MERGE_CHARS]
 
-    print("AFTER TRUNCATION:", len(combined_summary))
-
-    # Reduced from 12000 -> 5000
-    MAX_MERGE_CHARS = 5000
-    combined_summary = combined_summary[:MAX_MERGE_CHARS]
+    print("AFTER MERGE LENGTH:", len(combined_summary))
 
     final_prompt = f"""
-You are given section-wise summaries of a full document.
+You are given section-wise summaries of a document.
 
 TASK:
-- Merge all sections into one structured study note.
-- Maintain chapter-wise flow.
-- Remove duplicate content.
-- Keep important headings.
-- Do not invent information.
-- Keep it concise and exam-friendly.
+- Merge into clean study notes
+- Remove duplicates
+- Keep structure
+- Be concise and exam-friendly
 
 CONTENT:
-
 {combined_summary}
 """
 
     print("NUMBER OF BATCHES:", len(batch_summaries))
-    print("COMBINED SUMMARY LENGTH:", len(combined_summary))
     print("FINAL PROMPT LENGTH:", len(final_prompt))
 
     response = groq_call(
         client,
         model="llama-3.1-8b-instant",
         messages=[
-            {
-                "role": "system",
-                "content": system_prompt
-            },
-            {
-                "role": "user",
-                "content": final_prompt
-            },
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": final_prompt},
         ],
         temperature=0.3,
         max_tokens=600
