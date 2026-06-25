@@ -6,23 +6,20 @@ STYLE_PROMPTS = {
         "Summarize the following study material in 3-4 short bullet points, "
         "covering only the most important ideas."
     ),
+
     "detailed": """
-Create complete university exam notes from the document.
+Create university exam notes.
 
 Requirements:
-
-- Cover ALL topics from the document.
-- Do not skip any chapter.
-- Include all major headings found in the document.
-- If the document has multiple units, summarize every unit.
-- Use numbered main headings.
-- Under every heading provide 3-5 subpoints.
-- Expand every subpoint in 2-4 lines.
-- Preserve chapter-wise flow.
-- Include definitions, features, advantages, disadvantages, applications and examples where relevant.
-- Do not simply copy text from the document.
-- Rewrite content as study notes.
-- Make every topic suitable for 10-mark and 15-mark university answers.
+- Cover all important topics.
+- Use numbered headings.
+- Provide 3-5 key points per heading.
+- Include definitions, features, advantages,
+  disadvantages and applications where relevant.
+- Preserve topic-wise structure.
+- Rewrite as study notes.
+- Avoid repetition.
+- Keep concise but complete.
 
 Format:
 
@@ -30,24 +27,11 @@ Format:
    - Point 1
    - Point 2
    - Point 3
-   - Point 4
 
 2. Topic Name
    - Point 1
    - Point 2
    - Point 3
-   - Point 4
-
-IMPORTANT:
-
-- Create a separate heading for every topic found in the document.
-- Do not merge multiple topics into one section.
-- Do not generate page-wise summaries.
-- Generate topic-wise study notes.
-- Cover every unit, chapter and heading present in the document.
-- If 20 topics exist, create 20 topic headings.
-- Do not create a final conclusion section unless it exists in the document.
-- Stop only after all topics are covered.
 """
 }
 
@@ -119,9 +103,10 @@ def summarize(client, chunks, style="brief", query=""):
 
     from rag.citation_engine import chunks_to_plain_text
 
-    print("BATCH MODE ACTIVE")
+    print("=" * 60)
+    print("SUMMARY AGENT STARTED")
+    print("=" * 60)
 
-    # Smaller batches reduce TPM spikes
     batch_size = 2
 
     chunk_batches = [
@@ -135,6 +120,14 @@ def summarize(client, chunks, style="brief", query=""):
         style,
         STYLE_PROMPTS["brief"]
     )
+
+    print("STYLE SELECTED:", style)
+    print("TOTAL CHUNKS:", len(chunks))
+    print("TOTAL BATCHES:", len(chunk_batches))
+
+    # =====================================================
+    # STEP 1: SUMMARIZE EACH BATCH
+    # =====================================================
 
     for idx, batch in enumerate(chunk_batches):
 
@@ -150,8 +143,8 @@ def summarize(client, chunks, style="brief", query=""):
             limit=len(batch)
         )
 
-        # Prevent giant prompts
-        context = context[:6000]
+        # Reduced from 6000 -> 2000
+        context = context[:2000]
 
         user_prompt = f"""
 User Request:
@@ -160,6 +153,9 @@ User Request:
 Material:
 {context}
 """
+
+        print("CONTEXT LENGTH:", len(context))
+        print("USER PROMPT LENGTH:", len(user_prompt))
 
         response = groq_call(
             client,
@@ -175,35 +171,47 @@ Material:
                 },
             ],
             temperature=0.3,
-            max_tokens=500
+            max_tokens=250
         )
+
+        try:
+            print("USAGE:", response.usage)
+        except Exception:
+            pass
 
         summary_text = (
             response.choices[0]
             .message.content
         )
 
+        # Limit size of each batch summary
+        summary_text = summary_text[:1200]
+
         batch_summaries.append(summary_text)
 
-    print("STYLE SELECTED:", style)
+    # =====================================================
+    # STEP 2: MERGE BATCH SUMMARIES
+    # =====================================================
 
     combined_summary = "\n\n".join(batch_summaries)
 
-    # Prevent huge merge prompt
-    MAX_MERGE_CHARS = 12000
+    # Reduced from 12000 -> 5000
+    MAX_MERGE_CHARS = 5000
     combined_summary = combined_summary[:MAX_MERGE_CHARS]
 
     final_prompt = f"""
 You are given section-wise summaries of a full document.
 
 TASK:
-- Merge all sections into ONE complete PDF summary
-- Maintain chapter-wise structure
-- Do NOT skip any topic
-- Do NOT repeat content
-- Ensure full coverage of entire document
+- Merge all sections into one structured study note.
+- Maintain chapter-wise flow.
+- Remove duplicate content.
+- Keep important headings.
+- Do not invent information.
+- Keep it concise and exam-friendly.
 
 CONTENT:
+
 {combined_summary}
 """
 
@@ -225,10 +233,14 @@ CONTENT:
             },
         ],
         temperature=0.3,
-        max_tokens=1200
+        max_tokens=600
     )
 
-    print("summary_agent loaded successfully")
-    print("detect_style found:", callable(detect_style))
+    try:
+        print("FINAL USAGE:", response.usage)
+    except Exception:
+        pass
+
+    print("SUMMARY COMPLETE")
 
     return response.choices[0].message.content
