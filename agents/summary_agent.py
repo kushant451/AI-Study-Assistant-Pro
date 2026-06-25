@@ -157,4 +157,7 @@ def summarize(client, chunks, style="brief", query=""):
         temperature=0.3,
     )
 
+    print("summary_agent loaded successfully")
+    print("detect_style found:", callable(detect_style))
+
     return response.choices[0].message.content
