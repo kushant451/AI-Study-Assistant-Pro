@@ -48,30 +48,24 @@ def detect_style(query):
         return "detailed"
 
     if any(word in query_lower for word in [
-        "detail",
-        "detailed",
-        "in depth",
-        "elaborate",
-        "full summary",
-        "complete summary",
-        "entire pdf",
-        "whole pdf",
-        "more summary",
-        "expand summary",
-        "detailed summary",
-        "long summary"
+        "detail", "detailed", "in depth", "elaborate",
+        "full summary", "complete summary", "entire pdf",
+        "whole pdf", "more summary", "expand summary",
+        "detailed summary", "long summary"
     ]):
         return "detailed"
 
     if any(word in query_lower for word in [
-        "exam",
-        "revision",
-        "important points",
-        "key points"
+        "exam", "revision", "important points", "key points"
     ]):
         return "detailed"
 
     return "brief"
+
+
+def estimate_tokens(text):
+    """Rough estimate: 1 token ≈ 4 characters."""
+    return len(text) // 4
 
 
 def groq_call(client, **kwargs):
@@ -82,7 +76,7 @@ def groq_call(client, **kwargs):
             return client.chat.completions.create(**kwargs)
 
         except RateLimitError:
-            wait_time = min(2 * (attempt + 1), 10)
+            wait_time = min(4 * (attempt + 1), 30)  # longer waits
             print(f"Rate limit hit. Retry {attempt + 1}/{retries}. Waiting {wait_time}s...")
             time.sleep(wait_time)
 
@@ -97,7 +91,6 @@ def summarize(client, chunks, style="brief", query=""):
     print("SUMMARY AGENT STARTED")
     print("=" * 60)
 
-    # 🔥 safer batching (important for TPM)
     batch_size = 1
 
     chunk_batches = [
@@ -109,9 +102,19 @@ def summarize(client, chunks, style="brief", query=""):
 
     system_prompt = STYLE_PROMPTS.get(style, STYLE_PROMPTS["brief"])
 
+    # ── Token budget ──────────────────────────────────────────
+    TPM_LIMIT        = 6000
+    SAFETY_MARGIN    = 1000          # headroom for prompt scaffolding
+    MAX_TOKENS_OUT   = 200           # output tokens per batch call
+    CONTEXT_TOKEN_BUDGET = TPM_LIMIT - SAFETY_MARGIN - MAX_TOKENS_OUT
+    MAX_CONTEXT_CHARS    = CONTEXT_TOKEN_BUDGET * 4  # ≈ 4 chars/token → ~1900
+    MAX_CONTEXT_CHARS    = min(MAX_CONTEXT_CHARS, 400)  # hard cap at 400 chars
+    # ─────────────────────────────────────────────────────────
+
     print("STYLE SELECTED:", style)
     print("TOTAL CHUNKS:", len(chunks))
     print("TOTAL BATCHES:", len(chunk_batches))
+    print("MAX CONTEXT CHARS PER BATCH:", MAX_CONTEXT_CHARS)
 
     # =====================================================
     # STEP 1: SUMMARIZE EACH BATCH
@@ -120,23 +123,23 @@ def summarize(client, chunks, style="brief", query=""):
 
         print(f"Processing batch {idx + 1}/{len(chunk_batches)}")
 
-        time.sleep(1)
+        time.sleep(3)  # increased sleep to stay under TPM
 
         context = chunks_to_plain_text(batch, limit=len(batch))
+        context = context[:MAX_CONTEXT_CHARS]  # safe trim
 
-        # 🔥 strict limit (important)
-        context = context[:800]
+        user_prompt = f"User Request:\n{query}\n\nMaterial:\n{context}"
 
-        user_prompt = f"""
-User Request:
-{query}
+        # Pre-flight token check
+        estimated = estimate_tokens(system_prompt + user_prompt)
+        print(f"Estimated input tokens: {estimated}")
 
-Material:
-{context}
-"""
-
-        print("CONTEXT LENGTH:", len(context))
-        print("USER PROMPT LENGTH:", len(user_prompt))
+        if estimated + MAX_TOKENS_OUT > TPM_LIMIT:
+            # Trim context further if still too large
+            overage_chars = (estimated + MAX_TOKENS_OUT - TPM_LIMIT) * 4
+            context = context[:max(100, len(context) - overage_chars)]
+            user_prompt = f"User Request:\n{query}\n\nMaterial:\n{context}"
+            print(f"Trimmed context to {len(context)} chars after pre-flight check")
 
         response = groq_call(
             client,
@@ -146,7 +149,7 @@ Material:
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.3,
-            max_tokens=250
+            max_tokens=MAX_TOKENS_OUT
         )
 
         try:
@@ -154,40 +157,36 @@ Material:
         except Exception:
             pass
 
-        summary_text = response.choices[0].message.content
-
-        # limit each batch output
-        summary_text = summary_text[:1000]
-
+        summary_text = response.choices[0].message.content[:800]
         batch_summaries.append(summary_text)
 
     # =====================================================
-    # STEP 2: MERGE BATCH SUMMARIES (FIXED)
+    # STEP 2: MERGE BATCH SUMMARIES
     # =====================================================
 
     combined_summary = "\n\n".join(batch_summaries)
 
-    # 🔥 safety trim
-    MAX_MERGE_CHARS = 2500
+    # Keep merge input well under TPM
+    MAX_MERGE_CHARS = 1600  # reduced from 2500
     combined_summary = combined_summary[:MAX_MERGE_CHARS]
 
     print("AFTER MERGE LENGTH:", len(combined_summary))
 
-    final_prompt = f"""
-You are given section-wise summaries of a document.
+    final_prompt = (
+        "You are given section-wise summaries of a document.\n\n"
+        "TASK:\n"
+        "- Merge into clean study notes\n"
+        "- Remove duplicates\n"
+        "- Keep structure\n"
+        "- Be concise and exam-friendly\n\n"
+        f"CONTENT:\n{combined_summary}"
+    )
 
-TASK:
-- Merge into clean study notes
-- Remove duplicates
-- Keep structure
-- Be concise and exam-friendly
+    # Pre-flight for merge call
+    merge_estimated = estimate_tokens(system_prompt + final_prompt)
+    print(f"Merge estimated input tokens: {merge_estimated}")
 
-CONTENT:
-{combined_summary}
-"""
-
-    print("NUMBER OF BATCHES:", len(batch_summaries))
-    print("FINAL PROMPT LENGTH:", len(final_prompt))
+    time.sleep(3)  # wait before merge call too
 
     response = groq_call(
         client,
@@ -197,7 +196,7 @@ CONTENT:
             {"role": "user", "content": final_prompt},
         ],
         temperature=0.3,
-        max_tokens=600
+        max_tokens=500  # reduced from 600
     )
 
     try:
