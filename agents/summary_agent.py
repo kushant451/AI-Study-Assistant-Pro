@@ -194,6 +194,13 @@ Material:
     # =====================================================
 
     combined_summary = "\n\n".join(batch_summaries)
+    print("BEFORE TRUNCATION:", len(combined_summary))
+
+    MAX_MERGE_CHARS = 5000
+
+    combined_summary = combined_summary[:MAX_MERGE_CHARS]
+
+    print("AFTER TRUNCATION:", len(combined_summary))
 
     # Reduced from 12000 -> 5000
     MAX_MERGE_CHARS = 5000
