@@ -1,5 +1,11 @@
+import time
+from groq import RateLimitError
+
 STYLE_PROMPTS = {
-    "brief": "Summarize the following study material in 3-4 short bullet points, covering only the most important ideas.",
+    "brief": (
+        "Summarize the following study material in 3-4 short bullet points, "
+        "covering only the most important ideas."
+    ),
     "detailed": """
 Create complete university exam notes from the document.
 
@@ -44,11 +50,11 @@ IMPORTANT:
 - Stop only after all topics are covered.
 """
 }
-# move import inside function to avoid circular import
 
 
 def detect_style(query):
     query_lower = query.lower()
+
     if any(word in query_lower for word in [
         "full pdf summary",
         "summarize entire pdf",
@@ -56,6 +62,7 @@ def detect_style(query):
         "complete pdf summary"
     ]):
         return "detailed"
+
     if any(word in query_lower for word in [
         "detail",
         "detailed",
@@ -82,14 +89,40 @@ def detect_style(query):
 
     return "brief"
 
+
+def groq_call(client, **kwargs):
+    """
+    Retry automatically when Groq returns a rate-limit error.
+    """
+
+    retries = 5
+
+    for attempt in range(retries):
+        try:
+            return client.chat.completions.create(**kwargs)
+
+        except RateLimitError:
+            wait_time = min(2 * (attempt + 1), 10)
+
+            print(
+                f"Rate limit hit. "
+                f"Retry {attempt + 1}/{retries}. "
+                f"Waiting {wait_time}s..."
+            )
+
+            time.sleep(wait_time)
+
+    raise Exception("Groq API rate limit exceeded after retries")
+
+
 def summarize(client, chunks, style="brief", query=""):
 
-    from rag.citation_engine import chunks_to_plain_text  # moved inside
+    from rag.citation_engine import chunks_to_plain_text
 
     print("BATCH MODE ACTIVE")
 
-
-    batch_size = 4
+    # Smaller batches reduce TPM spikes
+    batch_size = 2
 
     chunk_batches = [
         chunks[i:i + batch_size]
@@ -98,68 +131,101 @@ def summarize(client, chunks, style="brief", query=""):
 
     batch_summaries = []
 
-    system_prompt = STYLE_PROMPTS.get(style, STYLE_PROMPTS["brief"])
+    system_prompt = STYLE_PROMPTS.get(
+        style,
+        STYLE_PROMPTS["brief"]
+    )
 
-    for batch in chunk_batches:
-        response = client.chat.completions.create(...)
+    for idx, batch in enumerate(chunk_batches):
 
-        time.sleep(1.2)   # prevents burst
-            
+        print(
+            f"Processing batch "
+            f"{idx + 1}/{len(chunk_batches)}"
+        )
+
+        time.sleep(1)
 
         context = chunks_to_plain_text(
             batch,
             limit=len(batch)
         )
 
+        # Prevent giant prompts
+        context = context[:6000]
+
         user_prompt = f"""
-        User Request:
-        {query}
+User Request:
+{query}
 
-        Material:
-        {context}
-        """
-        batch_system_prompt = """
-        Summarize this section.
-        Capture important headings and concepts.
-        Maximum 150 words.
-        """
+Material:
+{context}
+"""
 
-        response = client.chat.completions.create(
+        response = groq_call(
+            client,
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": batch_system_prompt},
-                {"role": "user", "content": user_prompt},
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": user_prompt
+                },
             ],
             temperature=0.3,
+            max_tokens=500
         )
 
-        batch_summaries.append(
-            response.choices[0].message.content
+        summary_text = (
+            response.choices[0]
+            .message.content
         )
 
-    
+        batch_summaries.append(summary_text)
 
     print("STYLE SELECTED:", style)
 
+    combined_summary = "\n\n".join(batch_summaries)
 
-    combined_summary = "\n\n".join(batch_summaries[:6])
+    # Prevent huge merge prompt
+    MAX_MERGE_CHARS = 12000
+    combined_summary = combined_summary[:MAX_MERGE_CHARS]
 
     final_prompt = f"""
-    Combine the following partial summaries into one complete,
-    well-structured study note.
+You are given section-wise summaries of a full document.
 
-    {combined_summary}
-    """
+TASK:
+- Merge all sections into ONE complete PDF summary
+- Maintain chapter-wise structure
+- Do NOT skip any topic
+- Do NOT repeat content
+- Ensure full coverage of entire document
+
+CONTENT:
+{combined_summary}
+"""
+
     print("NUMBER OF BATCHES:", len(batch_summaries))
     print("COMBINED SUMMARY LENGTH:", len(combined_summary))
     print("FINAL PROMPT LENGTH:", len(final_prompt))
-    response = client.chat.completions.create(
+
+    response = groq_call(
+        client,
         model="llama-3.1-8b-instant",
         messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": final_prompt},
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": final_prompt
+            },
         ],
         temperature=0.3,
+        max_tokens=1200
     )
 
     print("summary_agent loaded successfully")
