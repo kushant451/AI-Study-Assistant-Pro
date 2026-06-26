@@ -121,27 +121,23 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
                 )
                 break
 
-    retrieved = search(query, embedder, index, chunks, top_k=5)
-    print("\n====================")
-    print("QUERY:", query)
-    print("====================")
+    retrieved = search(query, embedder, index, chunks, top_k=3)  # reduced from 5
 
     context = build_context_with_citations(retrieved)
-    context = context[:1500]
+    context = context[:800]  # reduced from 1500
 
     history_text = format_history(chat_history)
 
-    system_prompt = (
-        "You are a university study assistant. "
-        "Use only the document context. "
-        "Answer in clear numbered points suitable for a 10-mark exam answer."
-    )
+    system_prompt = "You are a university study assistant. Use only the document context. Be concise."
 
     user_prompt = (
-        f"Recent conversation:\n{history_text}\n\n"
-        f"Document Context:\n{context}\n\n"
-        f"Question: {query[:300]}"
+        f"Context:\n{context}\n\n"
+        f"Question: {query[:200]}"  # removed history to save tokens
     )
+
+    # verify before sending
+    total_est = (len(system_prompt) + len(user_prompt)) // 3 + 500
+    print(f"[DOC_QA TOKEN EST] ~{total_est}")
 
     response = groq_call(
         client,
@@ -151,7 +147,7 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
             {"role": "user",   "content": user_prompt},
         ],
         temperature=0.1,
-        max_tokens=800,
+        max_tokens=500,  # reduced from 800
     )
 
     answer = response.choices[0].message.content
@@ -159,53 +155,3 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
     confidence = confidence_label(retrieved)
 
     return answer, {"citations": citations, "confidence": confidence}
-
-
-def _general_chat(client, query, chat_history):
-
-    history_text = format_history(chat_history)
-    system_prompt = "You are a friendly study assistant. Answer clearly and concisely."
-    user_prompt = f"Recent conversation:\n{history_text}\n\nMessage: {query[:300]}"
-
-    response = groq_call(
-        client,
-        model="llama-3.1-8b-instant",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": user_prompt},
-        ],
-        temperature=0.3,
-        max_tokens=600,
-    )
-
-    return response.choices[0].message.content
-
-
-def run_agent(client, query, embedder=None, index=None, chunks=None, chat_history=None):
-
-    chat_history = chat_history or []
-    has_documents = chunks is not None and len(chunks) > 0
-
-    tool = route_query(client, query, has_documents, chat_history)
-
-    extra = None
-    history_text = format_history(chat_history)
-
-    if tool == "doc_qa":
-        answer, extra = _doc_qa(client, query, embedder, index, chunks, chat_history)
-
-    elif tool == "summarize":
-        style = detect_style(query)
-        answer = summarize(client, chunks, style=style, query=query)
-
-    elif tool == "quiz":
-        extra = generate_quiz(client, chunks)
-        answer = "Here's a quiz based on your material."
-
-    elif tool == "web_search":
-        answer = answer_with_web_search(client, query, history_text)
-
-    else:
-        answer = _general_chat(client, query, chat_history)
-
-    return tool, answer, extra
