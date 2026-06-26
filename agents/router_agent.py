@@ -1,3 +1,7 @@
+import re
+import time
+from groq import RateLimitError, APIStatusError
+
 from rag.vector_store import search
 from rag.citation_engine import (
     build_context_with_citations,
@@ -7,6 +11,22 @@ from rag.citation_engine import (
 from agents.quiz_agent import generate_quiz
 from agents.summary_agent import summarize, detect_style
 from agents.web_agent import answer_with_web_search
+
+
+def extract_wait_time(error_message):
+    match = re.search(r'try again in ([0-9.]+)s', str(error_message))
+    return float(match.group(1)) + 2.0 if match else 15.0
+
+
+def groq_call(client, **kwargs):
+    for attempt in range(8):
+        try:
+            return client.chat.completions.create(**kwargs)
+        except (RateLimitError, APIStatusError) as e:
+            wait = max(extract_wait_time(e), 8.0)
+            print(f"[GROQ] Error (attempt {attempt+1}/8). Waiting {wait:.1f}s...")
+            time.sleep(wait)
+    raise Exception("Groq API failed after all retries.")
 
 
 def is_follow_up(query: str):
@@ -44,9 +64,9 @@ def format_history(chat_history):
     if not chat_history:
         return "(no previous messages)"
     lines = []
-    for msg in chat_history[-3:]:  # reduced from 6 to 3
+    for msg in chat_history[-3:]:
         role = "User" if msg["role"] == "user" else "Assistant"
-        content = msg["content"][:150]  # reduced from 400 to 150
+        content = msg["content"][:150]
         lines.append(f"{role}: {content}")
     return "\n".join(lines)
 
@@ -74,11 +94,12 @@ def route_query(client, query, has_documents, chat_history):
     else:
         prompt = ROUTER_PROMPT.format(history=history_text, query=query[:200])
 
-    response = client.chat.completions.create(
+    response = groq_call(
+        client,
         model="llama-3.1-8b-instant",
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
-        max_tokens=10,  # only needs one word
+        max_tokens=10,
     )
 
     decision = response.choices[0].message.content.strip().lower()
@@ -100,13 +121,13 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
                 )
                 break
 
-    retrieved = search(query, embedder, index, chunks, top_k=5)  # reduced from 8
+    retrieved = search(query, embedder, index, chunks, top_k=5)
     print("\n====================")
     print("QUERY:", query)
     print("====================")
 
     context = build_context_with_citations(retrieved)
-    context = context[:1500]  # hard cap context
+    context = context[:1500]
 
     history_text = format_history(chat_history)
 
@@ -122,14 +143,15 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
         f"Question: {query[:300]}"
     )
 
-    response = client.chat.completions.create(
+    response = groq_call(
+        client,
         model="llama-3.1-8b-instant",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt},
         ],
         temperature=0.1,
-        max_tokens=800,  # reduced from 2000
+        max_tokens=800,
     )
 
     answer = response.choices[0].message.content
@@ -145,14 +167,15 @@ def _general_chat(client, query, chat_history):
     system_prompt = "You are a friendly study assistant. Answer clearly and concisely."
     user_prompt = f"Recent conversation:\n{history_text}\n\nMessage: {query[:300]}"
 
-    response = client.chat.completions.create(
+    response = groq_call(
+        client,
         model="llama-3.1-8b-instant",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt},
         ],
         temperature=0.3,
-        max_tokens=600,  # reduced from 2000
+        max_tokens=600,
     )
 
     return response.choices[0].message.content
