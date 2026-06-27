@@ -131,13 +131,12 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history,
     effective_topic = last_topic if (is_follow_up(query) and last_topic) else query
 
     if is_follow_up(query) and last_retrieved is not None:
-        # ── use last topic as search query so FAISS finds right chunks ──
-        search_query = last_topic  # search on original topic not "more theory"
-        print(f"[FOLLOW-UP] Searching with original topic: '{search_query}'")
-        retrieved = search(search_query, embedder, index, chunks, top_k=8)
-        retrieved = filter_chunks_by_topic(retrieved, search_query)
+        print(f"[FOLLOW-UP] Searching with original topic: '{last_topic}'")
+        retrieved = search(last_topic, embedder, index, chunks, top_k=8)
+        retrieved = filter_chunks_by_topic(retrieved, last_topic)
         query = f"Provide more detailed explanation about '{last_topic}' using only the document."
-        print(f"[FOLLOW-UP] Got {len(retrieved)} filtered chunks")
+        new_retrieved = retrieved      # ← update cache with fresh filtered chunks
+        new_topic = last_topic         # ← keep topic locked, don't reset
     else:
         retrieved = search(query, embedder, index, chunks, top_k=8)
         retrieved = filter_chunks_by_topic(retrieved, query)
