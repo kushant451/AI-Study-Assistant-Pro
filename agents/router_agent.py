@@ -1,6 +1,4 @@
-import re
 import time
-from groq import RateLimitError, APIStatusError
 
 from rag.vector_store import search
 from rag.citation_engine import (
@@ -13,20 +11,17 @@ from agents.summary_agent import summarize, detect_style
 from agents.web_agent import answer_with_web_search
 
 
-def extract_wait_time(error_message):
-    match = re.search(r'try again in ([0-9.]+)s', str(error_message))
-    return float(match.group(1)) + 2.0 if match else 15.0
-
-
-def groq_call(client, **kwargs):
-    for attempt in range(8):
+def gemini_call(client, system_prompt, user_prompt):
+    for attempt in range(5):
         try:
-            return client.chat.completions.create(**kwargs)
-        except (RateLimitError, APIStatusError) as e:
-            wait = max(extract_wait_time(e), 8.0)
-            print(f"[GROQ] Error (attempt {attempt+1}/8). Waiting {wait:.1f}s...")
+            prompt = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
+            response = client.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            wait = min(5 * (attempt + 1), 30)
+            print(f"[GEMINI] Error (attempt {attempt+1}/5). Waiting {wait}s... {e}")
             time.sleep(wait)
-    raise Exception("Groq API failed after all retries.")
+    raise Exception("Gemini API failed after all retries.")
 
 
 def is_follow_up(query: str):
@@ -46,18 +41,6 @@ def is_exam_question(query: str):
             "write note", "long answer", "10 marks", "15 marks", "evolution"
         ]
     )
-
-
-ROUTER_PROMPT = """You are a routing assistant. Reply with ONLY one word.
-
-Tools: doc_qa, summarize, quiz, web_search, general_chat
-
-Recent conversation:
-{history}
-
-User message: "{query}"
-
-Answer with exactly one word."""
 
 
 def format_history(chat_history):
@@ -84,21 +67,13 @@ def route_query(client, query, has_documents, chat_history):
             return "summarize"
         return "doc_qa"
 
-    history_text = format_history(chat_history)
     prompt = (
         "Reply with ONLY one word: 'web_search' or 'general_chat'.\n\n"
         f"Question: {query[:200]}"
     )
+    decision = gemini_call(client, "", prompt)
+    decision = decision.strip().lower()
 
-    response = groq_call(
-        client,
-        model="llama-3.1-8b-instant",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-        max_tokens=10,
-    )
-
-    decision = response.choices[0].message.content.strip().lower()
     valid_tools = ["doc_qa", "summarize", "quiz", "web_search", "general_chat"]
     for tool in valid_tools:
         if tool in decision:
@@ -117,33 +92,41 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
                 )
                 break
 
-    retrieved = search(query, embedder, index, chunks, top_k=3)
+    retrieved = search(query, embedder, index, chunks, top_k=8)
 
     context = build_context_with_citations(retrieved)
-    context = context[:800]
+    context = context[:5000]  # Gemini handles much more
 
-    system_prompt = "You are a university study assistant. Use only the document context. Be concise."
+    history_text = format_history(chat_history)
+
+    chunk_count = len(retrieved) if retrieved else 0
+    if chunk_count < 5:
+        general_knowledge_instruction = (
+            "PDF coverage is LOW. After answering from the PDF, "
+            "add a clearly labeled '🌐 Additional Context (General Knowledge)' section "
+            "with 3-5 relevant general knowledge points that EXTEND "
+            "what the PDF says. Keep it directly relevant to the topic only. "
+            "Never contradict the PDF content."
+        )
+    else:
+        general_knowledge_instruction = (
+            "PDF coverage is HIGH. Do NOT add any general knowledge. "
+            "Answer strictly from the PDF context only."
+        )
+
+    system_prompt = """You are an expert university study assistant.
+Use only the document context provided.
+Answer in detailed numbered points suitable for a 10-15 mark exam answer.
+Include definitions, explanations, examples and applications."""
 
     user_prompt = (
-        f"Context:\n{context}\n\n"
-        f"Question: {query[:200]}"
+        f"Recent conversation:\n{history_text}\n\n"
+        f"DOCUMENT CONTEXT:\n{context}\n\n"
+        f"Question: {query}\n\n"
+        f"COVERAGE INSTRUCTION: {general_knowledge_instruction}"
     )
 
-    total_est = (len(system_prompt) + len(user_prompt)) // 3 + 500
-    print(f"[DOC_QA TOKEN EST] ~{total_est}")
-
-    response = groq_call(
-        client,
-        model="llama-3.1-8b-instant",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": user_prompt},
-        ],
-        temperature=0.1,
-        max_tokens=500,
-    )
-
-    answer = response.choices[0].message.content
+    answer = gemini_call(client, system_prompt, user_prompt)
     citations = format_citations_for_display(retrieved)
     confidence = confidence_label(retrieved)
 
@@ -153,21 +136,10 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
 def _general_chat(client, query, chat_history):
 
     history_text = format_history(chat_history)
-    system_prompt = "You are a friendly study assistant. Answer clearly and concisely."
-    user_prompt = f"Recent conversation:\n{history_text}\n\nMessage: {query[:300]}"
+    system_prompt = "You are a friendly study assistant. Answer clearly and helpfully."
+    user_prompt = f"Recent conversation:\n{history_text}\n\nMessage: {query}"
 
-    response = groq_call(
-        client,
-        model="llama-3.1-8b-instant",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": user_prompt},
-        ],
-        temperature=0.3,
-        max_tokens=600,
-    )
-
-    return response.choices[0].message.content
+    return gemini_call(client, system_prompt, user_prompt)
 
 
 def run_agent(client, query, embedder=None, index=None, chunks=None, chat_history=None):
