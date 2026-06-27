@@ -12,6 +12,10 @@ from agents.quiz_agent import generate_quiz
 from agents.summary_agent import summarize, detect_style
 from agents.web_agent import answer_with_web_search
 
+# cache last retrieved chunks per session
+_last_retrieved = {}
+_last_topic = {}
+
 
 def extract_wait_time(error_message):
     match = re.search(r'try again in ([0-9.]+)s', str(error_message))
@@ -69,7 +73,7 @@ def route_query(client, query, has_documents, chat_history):
 
     response = groq_call(
         client,
-        model="llama-3.1-8b-instant",  # keep small model for routing only
+        model="llama-3.1-8b-instant",
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
         max_tokens=10,
@@ -85,25 +89,26 @@ def route_query(client, query, has_documents, chat_history):
 
 def _doc_qa(client, query, embedder, index, chunks, chat_history):
 
-    search_query = query
-    original_topic = query
+    session_key = id(chunks)  # unique key per uploaded document
 
     if is_follow_up(query):
-        for msg in reversed(chat_history):
-            if msg["role"] == "user" and not is_follow_up(msg["content"]):
-                original_topic = msg["content"]
-                search_query = original_topic
-                for amsg in reversed(chat_history):
-                    if amsg["role"] == "assistant":
-                        search_query = f"{original_topic} {amsg['content'][:100]}"
-                        break
-                query = (
-                    f"Provide more detailed explanation about '{original_topic}' "
-                    f"using only what is written in the document."
-                )
-                break
+        # reuse last retrieved chunks — skip vector search entirely
+        if session_key in _last_retrieved:
+            retrieved = _last_retrieved[session_key]
+            original_topic = _last_topic.get(session_key, query)
+            query = (
+                f"Provide more detailed explanation about '{original_topic}' "
+                f"using only what is written in the document."
+            )
+            print(f"[FOLLOW-UP] Reusing cached chunks for topic: {original_topic}")
+        else:
+            retrieved = search(query, embedder, index, chunks, top_k=6)
+    else:
+        retrieved = search(query, embedder, index, chunks, top_k=6)
+        # cache for follow-ups
+        _last_retrieved[session_key] = retrieved
+        _last_topic[session_key] = query
 
-    retrieved = search(search_query, embedder, index, chunks, top_k=6)
     context = build_context_with_citations(retrieved)
     context = context[:3000]
     history_text = format_history(chat_history)
@@ -127,7 +132,7 @@ Answer using ONLY the context above. If context is insufficient say: "The docume
 
     response = groq_call(
         client,
-        model="llama-3.3-70b-versatile",  # bigger model follows instructions better
+        model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt},
