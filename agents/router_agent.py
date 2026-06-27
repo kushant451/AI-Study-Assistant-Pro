@@ -49,36 +49,42 @@ def format_history(chat_history):
     return "\n".join(lines)
 
 
-def filter_context_by_topic(context: str, topic: str) -> str:
-    """Remove sentences/paragraphs not related to the topic."""
-    # keywords to EXCLUDE if topic is NOT about BPR
-    exclude_topics = {
-        "bpr": ["reengineering", "radical redesign", "cleanslate", "clean slate",
-                "tqm", "total quality", "suggestion scheme", "six sigma", "lean management"],
-        "erp": [],
-    }
+BPR_KEYWORDS = [
+    "reengineering", "bpr", "radical redesign", "cleanslate",
+    "clean slate", "tqm", "total quality", "suggestion scheme",
+    "six sigma", "lean management", "hammer and champy",
+    "fundamental rethinking", "dramatic improvement"
+]
 
+ERP_KEYWORDS = [
+    "erp", "mrp", "mrpii", "enterprise resource", "material requirement",
+    "manufacturing resource", "bill of material", "bom", "master production"
+]
+
+
+def is_bpr_chunk(chunk: dict) -> bool:
+    text = chunk.get("text", "").lower()
+    bpr_hits = sum(1 for k in BPR_KEYWORDS if k in text)
+    erp_hits = sum(1 for k in ERP_KEYWORDS if k in text)
+    return bpr_hits > erp_hits
+
+
+def filter_chunks_by_topic(retrieved: list, topic: str) -> list:
     topic_lower = topic.lower()
+    is_erp_query = any(k in topic_lower for k in ERP_KEYWORDS)
+    is_bpr_query = any(k in topic_lower for k in BPR_KEYWORDS)
 
-    # detect what topic we are on
-    is_bpr_topic = any(k in topic_lower for k in ["bpr", "reengineering", "business process re"])
-    is_erp_topic = any(k in topic_lower for k in ["erp", "mrp", "enterprise resource"])
+    if is_erp_query and not is_bpr_query:
+        filtered = [c for c in retrieved if not is_bpr_chunk(c)]
+        print(f"[FILTER] ERP topic: removed {len(retrieved)-len(filtered)} BPR chunks")
+        return filtered if filtered else retrieved
 
-    lines = context.split("\n")
-    filtered = []
+    if is_bpr_query and not is_erp_query:
+        filtered = [c for c in retrieved if is_bpr_chunk(c)]
+        print(f"[FILTER] BPR topic: kept {len(filtered)} BPR chunks")
+        return filtered if filtered else retrieved
 
-    for line in lines:
-        line_lower = line.lower()
-
-        # if user asked about ERP, remove BPR lines
-        if is_erp_topic and not is_bpr_topic:
-            if any(k in line_lower for k in exclude_topics["bpr"]):
-                print(f"[FILTER] Removed BPR line: {line[:60]}")
-                continue
-
-        filtered.append(line)
-
-    return "\n".join(filtered)
+    return retrieved
 
 
 def route_query(client, query, has_documents, chat_history):
@@ -120,6 +126,7 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history,
 
     new_retrieved = last_retrieved
     new_topic = last_topic
+    effective_topic = last_topic if (is_follow_up(query) and last_topic) else query
 
     if is_follow_up(query) and last_retrieved is not None:
         print(f"[FOLLOW-UP] Reusing cached chunks for: {last_topic}")
@@ -127,24 +134,20 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history,
         query = f"Provide more detailed explanation about '{last_topic}' using only the document."
         print(f"[FOLLOW-UP] Using {len(retrieved)} cached chunks")
     else:
-        retrieved = search(query, embedder, index, chunks, top_k=6)
+        retrieved = search(query, embedder, index, chunks, top_k=8)
+        retrieved = filter_chunks_by_topic(retrieved, query)
         new_retrieved = retrieved
         new_topic = query
-        print(f"[NEW QUERY] Searched {len(retrieved)} chunks for: {query[:50]}")
+        print(f"[NEW QUERY] {len(retrieved)} chunks after filter for: {query[:50]}")
 
     context = build_context_with_citations(retrieved)
-
-    # filter out irrelevant topic content from context
-    effective_topic = last_topic if (is_follow_up(query) and last_topic) else new_topic
-    context = filter_context_by_topic(context, effective_topic)
     context = context[:3000]
-
     history_text = format_history(chat_history)
 
     system_prompt = f"""You are an expert ICAI exam tutor.
 CURRENT TOPIC: '{effective_topic}'
 You MUST answer ONLY about the CURRENT TOPIC above.
-STRICTLY FORBIDDEN: Do not discuss BPR, Business Process Reengineering, TQM, Six Sigma, Lean, or ANY topic other than '{effective_topic}'.
+STRICTLY FORBIDDEN: Do not mention BPR, Business Process Reengineering, TQM, Six Sigma, Lean, or ANY topic other than '{effective_topic}'.
 Use ONLY context sentences that directly discuss '{effective_topic}'.
 Ignore all other context even if present.
 Do NOT add outside examples or theory not in the text.
@@ -158,7 +161,7 @@ Conversation so far:
 
 Question: {query[:300]}
 
-Answer using ONLY the context above about '{effective_topic}'. 
+Answer using ONLY the context above about '{effective_topic}'.
 If context is insufficient say: "The document does not cover this in detail." """
 
     response = groq_call(
