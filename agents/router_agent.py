@@ -85,21 +85,21 @@ def route_query(client, query, has_documents, chat_history):
 
 def _doc_qa(client, query, embedder, index, chunks, chat_history):
 
-    original_topic = query  # save original
+    search_query = query  # what we send to vector search
+    original_topic = query  # what we tell the LLM to answer about
 
     if is_follow_up(query):
         for msg in reversed(chat_history):
             if msg["role"] == "user" and not is_follow_up(msg["content"]):
-                original_topic = msg["content"]  # get the real topic
+                original_topic = msg["content"]
+                search_query = original_topic  # search ONLY on original topic
                 query = (
-                    f"Explain in more detail specifically about '{original_topic}' "
-                    f"using only what is written in the document. "
-                    f"Do not add any outside information."
+                    f"Provide more detailed explanation about '{original_topic}' "
+                    f"using only what is written in the document."
                 )
                 break
 
-    # search using original topic, not the rewritten query
-    retrieved = search(original_topic, embedder, index, chunks, top_k=6)
+    retrieved = search(search_query, embedder, index, chunks, top_k=6)
     context = build_context_with_citations(retrieved)
     context = context[:3000]
     history_text = format_history(chat_history)
@@ -108,6 +108,7 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
 Answer STRICTLY from the document context below only.
 Do NOT add outside examples, companies, or theory not present in the text.
 Do NOT invent limitations, advantages, or comparisons not in the context.
+If asked for more detail, expand ONLY on the same topic as before.
 Structure: definition → key points from text → conclusion."""
 
     user_prompt = f"""Context:
@@ -116,9 +117,9 @@ Structure: definition → key points from text → conclusion."""
 Conversation so far:
 {history_text}
 
-Question: {query[:200]}
+Question: {query[:300]}
 
-Answer using ONLY the context above. If the context does not contain enough information, say: "The document does not cover this in detail." """
+Answer using ONLY the context above. If context is insufficient say: "The document does not cover this in detail." """
 
     response = groq_call(
         client,
