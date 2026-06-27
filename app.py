@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 import streamlit as st
-import google.generativeai as genai
+from google import genai  # ✅ New SDK
 
 from rag.pdf_loader import extract_text_from_multiple
 from rag.chunker import chunk_documents, get_document_stats
@@ -178,6 +178,12 @@ for key, value in defaults.items():
         st.session_state[key] = value
 
 
+# ── Helper: build a Gemini client from an API key ─────────────────────────────
+def make_client(api_key: str) -> genai.Client:
+    """Return a google-genai Client configured with the given API key."""
+    return genai.Client(api_key=api_key)
+
+
 def render_auth_screen():
     st.title("📚 AI Study & Research Assistant")
     st.caption("Please log in or create an account to continue")
@@ -252,7 +258,9 @@ with st.sidebar:
     st.success(f"Logged in as **{username}**")
 
     if st.button("Log out", use_container_width=True):
-        ...
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
 
     st.divider()
 
@@ -424,7 +432,7 @@ Features:
 
     if final_query:
         if not api_key:
-            st.error("Enter Gemini API key")
+            st.error("Enter your Gemini API key in the sidebar settings.")
             st.stop()
 
         st.session_state.messages.append({"role": "user", "content": final_query})
@@ -435,9 +443,8 @@ Features:
             for m in st.session_state.messages[:-1]
         ]
 
-        # ── Gemini client ──────────────────────────────────────
-        genai.configure(api_key=api_key)
-        client = genai.GenerativeModel("gemini-1.5-flash")
+        # ── ✅ New google-genai client ─────────────────────────
+        client = make_client(api_key)
 
         agent_runner = run_agent_graph if st.session_state.use_langgraph else run_agent_manual
 
@@ -472,11 +479,15 @@ with tab_interview:
         )
 
         if st.button("Generate New Questions"):
+            if not api_key:
+                st.error("Enter your Gemini API key in the sidebar settings.")
+                st.stop()
+
             st.session_state.interview_questions = []
             st.session_state.interview_results = {}
 
-            genai.configure(api_key=api_key)
-            client = genai.GenerativeModel("gemini-1.5-flash")
+            # ── ✅ New google-genai client ─────────────────────
+            client = make_client(api_key)
 
             questions = generate_interview_questions(
                 client,
@@ -491,8 +502,12 @@ with tab_interview:
             answer = st.text_area("Your answer", key=f"ans_{i}")
 
             if st.button("Submit", key=f"submit_{i}"):
-                genai.configure(api_key=api_key)
-                client = genai.GenerativeModel("gemini-1.5-flash")
+                if not api_key:
+                    st.error("Enter your Gemini API key in the sidebar settings.")
+                    st.stop()
+
+                # ── ✅ New google-genai client ─────────────────
+                client = make_client(api_key)
 
                 result = evaluate_answer(client, q, answer)
                 st.session_state.interview_results[i] = result
@@ -508,7 +523,7 @@ with tab_interview:
                 st.info(st.session_state.interview_results[i]["feedback"])
 
     else:
-        st.info("Upload docs first")
+        st.info("Upload and process PDFs first.")
 
 
 with tab_progress:
