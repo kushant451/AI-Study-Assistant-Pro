@@ -1,5 +1,7 @@
 import time
 
+MODEL = "gemini-2.0-flash"
+
 STYLE_PROMPTS = {
     "brief": (
         "You are an expert exam notes writer. "
@@ -34,10 +36,14 @@ def detect_style(query):
 
 
 def gemini_call(client, system_prompt, user_prompt):
+    """Call Gemini using the new google-genai SDK with retry logic."""
     for attempt in range(5):
         try:
             prompt = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
-            response = client.generate_content(prompt)
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=prompt,
+            )
             return response.text
         except Exception as e:
             wait = min(5 * (attempt + 1), 30)
@@ -92,7 +98,7 @@ def summarize(client, chunks, style="brief", query=""):
         all_summaries.append(text)
         print(f"  [OK] {len(text)} chars returned")
 
-        time.sleep(1)  # small delay
+        time.sleep(1)
 
     if not all_summaries:
         return "No content could be summarised."
