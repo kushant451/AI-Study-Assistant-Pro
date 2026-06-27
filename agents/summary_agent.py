@@ -36,12 +36,12 @@ def detect_style(query):
 def gemini_call(client, system_prompt, user_prompt):
     for attempt in range(5):
         try:
-            prompt = f"{system_prompt}\n\n{user_prompt}"
+            prompt = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
             response = client.generate_content(prompt)
             return response.text
         except Exception as e:
             wait = min(5 * (attempt + 1), 30)
-            print(f"[GEMINI] Error (attempt {attempt+1}/5). Waiting {wait}s... {e}")
+            print(f"[GEMINI ERROR] attempt {attempt+1}: {type(e).__name__}: {e}")
             time.sleep(wait)
     raise Exception("Gemini API failed after all retries.")
 

@@ -19,9 +19,10 @@ def gemini_call(client, system_prompt, user_prompt):
             return response.text
         except Exception as e:
             wait = min(5 * (attempt + 1), 30)
-            print(f"[GEMINI] Error (attempt {attempt+1}/5). Waiting {wait}s... {e}")
+            print(f"[GEMINI ERROR] attempt {attempt+1}: {type(e).__name__}: {e}")
             time.sleep(wait)
     raise Exception("Gemini API failed after all retries.")
+
 
 
 def is_follow_up(query: str):
