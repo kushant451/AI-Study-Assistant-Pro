@@ -85,17 +85,21 @@ def route_query(client, query, has_documents, chat_history):
 
 def _doc_qa(client, query, embedder, index, chunks, chat_history):
 
+    original_topic = query  # save original
+
     if is_follow_up(query):
         for msg in reversed(chat_history):
             if msg["role"] == "user" and not is_follow_up(msg["content"]):
+                original_topic = msg["content"]  # get the real topic
                 query = (
-                    f"Explain in more detail specifically about '{msg['content']}' "
+                    f"Explain in more detail specifically about '{original_topic}' "
                     f"using only what is written in the document. "
                     f"Do not add any outside information."
                 )
                 break
 
-    retrieved = search(query, embedder, index, chunks, top_k=6)
+    # search using original topic, not the rewritten query
+    retrieved = search(original_topic, embedder, index, chunks, top_k=6)
     context = build_context_with_citations(retrieved)
     context = context[:3000]
     history_text = format_history(chat_history)
