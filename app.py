@@ -483,6 +483,9 @@ Features:
         # update cache in session state
         st.session_state.last_retrieved_chunks = new_retrieved
         st.session_state.last_topic = new_topic
+        st.session_state.last_retrieved_chunks = new_retrieved
+        st.session_state.last_topic = new_topic
+        print(f"[DEBUG] Saved last_topic: {new_topic}, chunks: {new_retrieved is not None}")
 
         st.session_state.messages.append(
             {"role": "assistant", "content": answer, "tool": tool_used, "extra": extra}
