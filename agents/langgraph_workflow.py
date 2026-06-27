@@ -1,4 +1,3 @@
-import time
 from typing import TypedDict, Optional, List, Dict, Any
 from langgraph.graph import StateGraph, END
 
@@ -11,7 +10,7 @@ from rag.citation_engine import (
 from agents.quiz_agent import generate_quiz
 from agents.summary_agent import summarize, detect_style
 from agents.web_agent import answer_with_web_search
-from agents.router_agent import format_history, route_query, gemini_call
+from agents.router_agent import format_history, route_query, groq_call
 
 
 class AgentState(TypedDict):
@@ -43,10 +42,10 @@ def doc_qa_node(state: AgentState) -> dict:
         state["embedder"],
         state["index"],
         state["chunks"],
-        top_k=8,
+        top_k=5,
     )
     context = build_context_with_citations(retrieved)
-    context = context[:5000]
+    context = context[:800]
     history_text = format_history(state["chat_history"])
 
     system_prompt = """You are an expert academic study assistant.
@@ -64,8 +63,18 @@ Provide exam-oriented explanations."""
         "If this is a follow-up request, expand the previously discussed topic only."
     )
 
-    answer = gemini_call(state["client"], system_prompt, user_prompt)
+    response = groq_call(
+        state["client"],
+        model="llama-3.1-8b-instant",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.1,
+        max_tokens=500,
+    )
 
+    answer = response.choices[0].message.content
     extra = {
         "citations": format_citations_for_display(retrieved),
         "confidence": confidence_label(retrieved),
@@ -91,13 +100,11 @@ def quiz_node(state: AgentState) -> dict:
         state["chunks"],
         num_questions=15
     )
-
     answer = (
         "Here's a quiz based on your material:"
         if questions
         else "I generated a quiz, but couldn't format it correctly. Please try again."
     )
-
     return {"answer": answer, "extra": questions}
 
 
@@ -116,17 +123,25 @@ def general_chat_node(state: AgentState) -> dict:
 
     system_prompt = (
         "You are a friendly study assistant. Answer the user's message "
-        "helpfully and concisely, using the conversation history for "
-        "context if relevant."
+        "helpfully and concisely."
     )
 
     user_prompt = (
         f"Recent conversation:\n{history_text}\n\nMessage: {state['query']}"
     )
 
-    answer = gemini_call(state["client"], system_prompt, user_prompt)
+    response = groq_call(
+        state["client"],
+        model="llama-3.1-8b-instant",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.3,
+        max_tokens=500,
+    )
 
-    return {"answer": answer, "extra": None}
+    return {"answer": response.choices[0].message.content, "extra": None}
 
 
 def select_next_node(state: AgentState) -> str:
