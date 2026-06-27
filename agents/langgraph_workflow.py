@@ -1,3 +1,4 @@
+import time
 from typing import TypedDict, Optional, List, Dict, Any
 from langgraph.graph import StateGraph, END
 
@@ -10,7 +11,7 @@ from rag.citation_engine import (
 from agents.quiz_agent import generate_quiz
 from agents.summary_agent import summarize, detect_style
 from agents.web_agent import answer_with_web_search
-from agents.router_agent import format_history, route_query
+from agents.router_agent import format_history, route_query, gemini_call
 
 
 class AgentState(TypedDict):
@@ -42,57 +43,29 @@ def doc_qa_node(state: AgentState) -> dict:
         state["embedder"],
         state["index"],
         state["chunks"],
-        top_k=5,
+        top_k=8,
     )
     context = build_context_with_citations(retrieved)
+    context = context[:5000]
     history_text = format_history(state["chat_history"])
 
-    system_prompt = """
-        You are an expert academic study assistant.
-
-        Answer only from the provided context.
-
-        If the user asks a follow-up request such as:
-        - more theory
-        - elaborate
-        - explain more
-        - expand
-        - more details
-
-        then continue the SAME topic discussed in the previous answer.
-
-        Do not introduce unrelated topics from the document.
-
-        For example:
-        If previous answer was about SAP modules,
-        then 'add more theory' should expand SAP modules only.
-
-        If previous answer was about ERP evolution,
-        then 'add more theory' should expand ERP evolution only.
-
-        Use headings and bullet points.
-        Provide exam-oriented explanations.
-        """
+    system_prompt = """You are an expert academic study assistant.
+Answer only from the provided context.
+If the user asks a follow-up request such as more theory, elaborate,
+explain more, expand, more details — continue the SAME topic discussed
+in the previous answer.
+Use headings and bullet points.
+Provide exam-oriented explanations."""
 
     user_prompt = (
         f"Recent conversation:\n{history_text}\n\n"
         f"Context:\n{context}\n\n"
         f"Current Question: {state['query']}\n\n"
-        "If this is a follow-up request such as "
-        "'more theory', 'expand', or 'elaborate', "
-        "expand the previously discussed topic only."
+        "If this is a follow-up request, expand the previously discussed topic only."
     )
 
-    response = state["client"].chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.1,
-    )
+    answer = gemini_call(state["client"], system_prompt, user_prompt)
 
-    answer = response.choices[0].message.content
     extra = {
         "citations": format_citations_for_display(retrieved),
         "confidence": confidence_label(retrieved),
@@ -104,11 +77,11 @@ def doc_qa_node(state: AgentState) -> dict:
 def summarize_node(state: AgentState) -> dict:
     style = detect_style(state["query"])
     answer = summarize(
-    state["client"],
-    state["chunks"],
-    style=style,
-    query=state["query"]
-)
+        state["client"],
+        state["chunks"],
+        style=style,
+        query=state["query"]
+    )
     return {"answer": answer, "extra": None}
 
 
@@ -125,10 +98,8 @@ def quiz_node(state: AgentState) -> dict:
         else "I generated a quiz, but couldn't format it correctly. Please try again."
     )
 
-    return {
-        "answer": answer,
-        "extra": questions
-    }
+    return {"answer": answer, "extra": questions}
+
 
 def web_search_node(state: AgentState) -> dict:
     history_text = format_history(state["chat_history"])
@@ -142,6 +113,7 @@ def web_search_node(state: AgentState) -> dict:
 
 def general_chat_node(state: AgentState) -> dict:
     history_text = format_history(state["chat_history"])
+
     system_prompt = (
         "You are a friendly study assistant. Answer the user's message "
         "helpfully and concisely, using the conversation history for "
@@ -152,19 +124,9 @@ def general_chat_node(state: AgentState) -> dict:
         f"Recent conversation:\n{history_text}\n\nMessage: {state['query']}"
     )
 
-    response = state["client"].chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.3,
-    )
+    answer = gemini_call(state["client"], system_prompt, user_prompt)
 
-    return {
-        "answer": response.choices[0].message.content,
-        "extra": None,
-    }
+    return {"answer": answer, "extra": None}
 
 
 def select_next_node(state: AgentState) -> str:
