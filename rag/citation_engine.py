@@ -138,7 +138,12 @@ Document Context, you are violating these instructions.
         f"so do NOT include any dates in your answer. "
         f"Do NOT mention cloud computing, AI, or blockchain "
         f"unless they appear in the context above. "
-        f"If a fact is not in the context, do not say it."
+        f"If a fact is not in the context, do not say it.\n\n"
+        f"CRITICAL: If the question is about Evolution of ERP, "
+        f"the PDF only LISTS system names like MIS, IIS, EIS, CIS, EWS "
+        f"without any descriptions. Do NOT add descriptions for these — "
+        f"just mention they were introduced as stepping stones. "
+        f"Only describe MRP, MRPII and ERP in detail as the PDF explains those."
     )
 
     response = client.chat.completions.create(
