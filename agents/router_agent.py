@@ -12,10 +12,6 @@ from agents.quiz_agent import generate_quiz
 from agents.summary_agent import summarize, detect_style
 from agents.web_agent import answer_with_web_search
 
-# cache last retrieved chunks per session
-_last_retrieved = {}
-_last_topic = {}
-
 
 def extract_wait_time(error_message):
     match = re.search(r'try again in ([0-9.]+)s', str(error_message))
@@ -87,27 +83,23 @@ def route_query(client, query, has_documents, chat_history):
     return "general_chat"
 
 
-def _doc_qa(client, query, embedder, index, chunks, chat_history):
+def _doc_qa(client, query, embedder, index, chunks, chat_history,
+            last_retrieved=None, last_topic=None):
 
-    session_key = id(chunks)  # unique key per uploaded document
+    new_retrieved = last_retrieved
+    new_topic = last_topic
 
-    if is_follow_up(query):
-        # reuse last retrieved chunks — skip vector search entirely
-        if session_key in _last_retrieved:
-            retrieved = _last_retrieved[session_key]
-            original_topic = _last_topic.get(session_key, query)
-            query = (
-                f"Provide more detailed explanation about '{original_topic}' "
-                f"using only what is written in the document."
-            )
-            print(f"[FOLLOW-UP] Reusing cached chunks for topic: {original_topic}")
-        else:
-            retrieved = search(query, embedder, index, chunks, top_k=6)
+    if is_follow_up(query) and last_retrieved is not None:
+        print(f"[FOLLOW-UP] Reusing cached chunks for: {last_topic}")
+        retrieved = last_retrieved
+        query = (
+            f"Provide more detailed explanation about '{last_topic}' "
+            f"using only what is written in the document."
+        )
     else:
         retrieved = search(query, embedder, index, chunks, top_k=6)
-        # cache for follow-ups
-        _last_retrieved[session_key] = retrieved
-        _last_topic[session_key] = query
+        new_retrieved = retrieved
+        new_topic = query
 
     context = build_context_with_citations(retrieved)
     context = context[:3000]
@@ -145,7 +137,7 @@ Answer using ONLY the context above. If context is insufficient say: "The docume
     citations = format_citations_for_display(retrieved)
     confidence = confidence_label(retrieved)
 
-    return answer, {"citations": citations, "confidence": confidence}
+    return answer, {"citations": citations, "confidence": confidence}, new_retrieved, new_topic
 
 
 def _general_chat(client, query, chat_history):
@@ -168,17 +160,23 @@ def _general_chat(client, query, chat_history):
     return response.choices[0].message.content
 
 
-def run_agent(client, query, embedder=None, index=None, chunks=None, chat_history=None):
+def run_agent(client, query, embedder=None, index=None, chunks=None,
+              chat_history=None, last_retrieved=None, last_topic=None):
 
     chat_history = chat_history or []
     has_documents = chunks is not None and len(chunks) > 0
     tool = route_query(client, query, has_documents, chat_history)
 
     extra = None
+    new_retrieved = last_retrieved
+    new_topic = last_topic
     history_text = format_history(chat_history)
 
     if tool == "doc_qa":
-        answer, extra = _doc_qa(client, query, embedder, index, chunks, chat_history)
+        answer, extra, new_retrieved, new_topic = _doc_qa(
+            client, query, embedder, index, chunks, chat_history,
+            last_retrieved=last_retrieved, last_topic=last_topic
+        )
     elif tool == "summarize":
         style = detect_style(query)
         answer = summarize(client, chunks, style=style, query=query)
@@ -190,4 +188,4 @@ def run_agent(client, query, embedder=None, index=None, chunks=None, chat_histor
     else:
         answer = _general_chat(client, query, chat_history)
 
-    return tool, answer, extra
+    return tool, answer, extra, new_retrieved, new_topic

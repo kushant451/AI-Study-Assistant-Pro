@@ -2,7 +2,6 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 import os
-# print("MONGODB_URI =", os.getenv("MONGODB_URI"))
 import streamlit as st
 from groq import Groq
 
@@ -173,7 +172,8 @@ defaults = {
     "interview_questions": [],
     "interview_results": {},
     "use_langgraph": False,
-    
+    "last_retrieved_chunks": None,  # cache for follow-up queries
+    "last_topic": None,             # cache for follow-up queries
 }
 
 for key, value in defaults.items():
@@ -294,12 +294,12 @@ with st.sidebar:
             value=st.session_state.use_langgraph,
         )
 
-    
-
 
 if clear_button:
     st.session_state.messages = []
     st.session_state.quiz_results = {}
+    st.session_state.last_retrieved_chunks = None
+    st.session_state.last_topic = None
     clear_history(username)
     st.rerun()
 
@@ -319,6 +319,8 @@ if process_button:
             st.session_state.doc_stats = stats
             st.session_state.interview_questions = []
             st.session_state.interview_results = {}
+            st.session_state.last_retrieved_chunks = None
+            st.session_state.last_topic = None
 
             for doc in documents:
                 doc_chunks = [c for c in chunks if c["source"] == doc["filename"]]
@@ -373,6 +375,7 @@ else:
     st.warning(
         "📄 Upload and process PDFs to begin."
     )
+
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -415,11 +418,11 @@ with tab_chat:
 Upload one or more PDFs and click Process.
 
 Features:
-• Multi-PDF Question Answering
-• RAG-based Search
-• LangGraph Workflow
-• Mock Interviews
-• Progress Analytics
+- Multi-PDF Question Answering
+- RAG-based Search
+- LangGraph Workflow
+- Mock Interviews
+- Progress Analytics
 """)
 
     for msg in st.session_state.messages:
@@ -431,10 +434,8 @@ Features:
             if msg["role"] == "assistant":
                 with st.container(border=True):
                     st.write(msg["content"])
-
             else:
                 st.write(msg["content"])
-    
 
     final_query = st.chat_input("Ask something...")
 
@@ -455,14 +456,20 @@ Features:
         agent_runner = run_agent_graph if st.session_state.use_langgraph else run_agent_manual
 
         with st.spinner("Thinking..."):
-            tool_used, answer, extra = agent_runner(
+            tool_used, answer, extra, new_retrieved, new_topic = agent_runner(
                 client,
                 final_query,
                 embedder=st.session_state.embedder,
                 index=st.session_state.index,
                 chunks=st.session_state.chunks,
                 chat_history=history,
+                last_retrieved=st.session_state.last_retrieved_chunks,
+                last_topic=st.session_state.last_topic,
             )
+
+        # update cache in session state
+        st.session_state.last_retrieved_chunks = new_retrieved
+        st.session_state.last_topic = new_topic
 
         st.session_state.messages.append(
             {"role": "assistant", "content": answer, "tool": tool_used, "extra": extra}
@@ -538,4 +545,3 @@ with tab_interview:
 
 with tab_progress:
     render_dashboard()
-
