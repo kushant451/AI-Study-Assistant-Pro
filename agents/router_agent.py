@@ -92,14 +92,13 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history,
     if is_follow_up(query) and last_retrieved is not None:
         print(f"[FOLLOW-UP] Reusing cached chunks for: {last_topic}")
         retrieved = last_retrieved
-        query = (
-            f"Provide more detailed explanation about '{last_topic}' "
-            f"using only what is written in the document."
-        )
+        query = f"Expand further on: {last_topic}"
+        print(f"[FOLLOW-UP] Using {len(retrieved)} cached chunks")
     else:
         retrieved = search(query, embedder, index, chunks, top_k=6)
         new_retrieved = retrieved
         new_topic = query
+        print(f"[NEW QUERY] Searched {len(retrieved)} chunks for: {query[:50]}")
 
     context = build_context_with_citations(retrieved)
     context = context[:3000]
