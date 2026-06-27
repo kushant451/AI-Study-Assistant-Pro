@@ -19,4 +19,4 @@ duckduckgo-search==6.3.5
 bcrypt==4.2.0
 PyJWT==2.9.0
 cryptography>=42.0.0
-google-generativeai==0.8.6
+google-genai==2.10.0
