@@ -33,7 +33,6 @@ def build_context_with_citations(chunks):
             source = f"Source {i+1}"
             page = None
 
-        # include page number in citation marker if available
         label = f"[{i+1}]"
         if page:
             label += f" (Page {page})"
@@ -91,7 +90,7 @@ def coverage_note(chunks):
 def answer_with_citations(client, query, chunks, chat_history=None):
     """Answer a query using chunks with citation support."""
     context = build_context_with_citations(chunks)
-    context = context[:3000]  # increased from 2000 for better coverage
+    context = context[:5000]  # increased for better coverage
 
     history_text = "(no previous messages)"
     if chat_history:
@@ -101,34 +100,62 @@ def answer_with_citations(client, query, chunks, chat_history=None):
             lines.append(f"{role}: {msg['content'][:150]}")
         history_text = "\n".join(lines)
 
-    # ── UPDATED SYSTEM PROMPT ─────────────────────────────────
-    system_prompt = """You are a strict document-based study assistant.
+    # ── coverage check → decide if general knowledge needed ───
+    chunk_count = len(chunks) if chunks else 0
+    if chunk_count < 5:
+        general_knowledge_instruction = (
+            "PDF coverage is LOW. After answering from the PDF, "
+            "add a clearly labeled '🌐 Additional Context (General Knowledge)' section "
+            "with 3-5 relevant general knowledge points that EXTEND "
+            "what the PDF says. Keep it directly relevant to the topic only. "
+            "Never contradict the PDF content."
+        )
+    else:
+        general_knowledge_instruction = (
+            "PDF coverage is HIGH. Do NOT add any general knowledge. "
+            "Answer strictly from the PDF context only."
+        )
+
+    # ── SYSTEM PROMPT ─────────────────────────────────────────
+    system_prompt = """You are a strict document-based study assistant for university students.
 
 ABSOLUTE RULES:
-1. Use ONLY the exact information from the Document Context below.
-2. If the context does not mention a date, year, or fact — DO NOT add it.
-3. DO NOT use any outside knowledge or training data.
-4. DO NOT invent timelines, dates, or details not in the context.
-5. Explain in simple own words but ONLY what the document says.
-6. If something is not in the context, say "The PDF does not mention this."
-
-WHAT YOUR PDF ACTUALLY SAYS ABOUT EVOLUTION:
-- Only mention: MRP → MRPII → ERP progression
-- Only mention systems listed: MIS, IIS, EIS, CIS, EWS, MRP, MRPII, MRPIII
-- Only mention: LAN, WAN, Internet integration
-- NO dates unless the PDF explicitly states them
+1. Use ONLY the information from the Document Context provided.
+2. DO NOT copy-paste sentences directly from the document.
+3. Explain in simple own words but ONLY what the document says.
+4. Stay 100% faithful to what the PDF says — no invented facts.
+5. DO NOT add outside knowledge in the main PDF answer section.
+6. Do NOT include any dates or years unless the PDF explicitly states them.
+7. Do NOT mention cloud computing, AI, blockchain unless in the PDF context.
 
 RESPONSE FORMAT:
-📄 **Answer:**
-[Simple explanation using ONLY what context says]
 
-📍 **Source:** [page numbers from context]
-⚠️ **Note:** [only if PDF content is limited]
+📄 **From Your PDF:**
+[Answer strictly from PDF context in simple, clear words]
 
-STRICT WARNING: If you add ANY fact not present in the 
-Document Context, you are violating these instructions.
+📍 **Source:** [mention page numbers from context markers like (Page X)]
+
+---
+
+🌐 **Additional Context (General Knowledge):**
+[ONLY include this section when PDF coverage is LOW.
+Add 3-5 relevant general knowledge points that extend the PDF.
+Clearly label as general knowledge.
+Must be directly relevant to the topic — no off-topic content.
+Never contradict what the PDF says.]
+
+⚠️ **Note:** [only if PDF content is limited or partial]
+
+IMPORTANT:
+- If question is about Evolution of ERP:
+  PDF only LISTS system names MIS, IIS, EIS, CIS, EWS without descriptions.
+  Do NOT add descriptions for these — just say they were stepping stones.
+  Only describe MRP, MRPII and ERP in detail as PDF explains those.
+- If topic is not found in context at all, respond:
+  '❌ This topic was not found in the uploaded PDF.'
 """
 
+    # ── USER PROMPT ───────────────────────────────────────────
     user_prompt = (
         f"Recent conversation:\n{history_text}\n\n"
         f"DOCUMENT CONTEXT (answer ONLY from this):\n{context}\n\n"
@@ -143,7 +170,8 @@ Document Context, you are violating these instructions.
         f"the PDF only LISTS system names like MIS, IIS, EIS, CIS, EWS "
         f"without any descriptions. Do NOT add descriptions for these — "
         f"just mention they were introduced as stepping stones. "
-        f"Only describe MRP, MRPII and ERP in detail as the PDF explains those."
+        f"Only describe MRP, MRPII and ERP in detail as the PDF explains those.\n\n"
+        f"COVERAGE INSTRUCTION: {general_knowledge_instruction}"
     )
 
     response = client.chat.completions.create(
@@ -152,8 +180,8 @@ Document Context, you are violating these instructions.
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt},
         ],
-        temperature=0.2,   # slightly higher than 0.1 for more natural rephrasing
-        max_tokens=700,    # increased from 600 for complete answers
+        temperature=0.2,
+        max_tokens=900,   # increased for general knowledge section
     )
 
     answer = response.choices[0].message.content
