@@ -85,14 +85,18 @@ def route_query(client, query, has_documents, chat_history):
 
 def _doc_qa(client, query, embedder, index, chunks, chat_history):
 
-    search_query = query  # what we send to vector search
-    original_topic = query  # what we tell the LLM to answer about
+    search_query = query
+    original_topic = query
 
     if is_follow_up(query):
         for msg in reversed(chat_history):
             if msg["role"] == "user" and not is_follow_up(msg["content"]):
                 original_topic = msg["content"]
-                search_query = original_topic  # search ONLY on original topic
+                search_query = original_topic
+                for amsg in reversed(chat_history):
+                    if amsg["role"] == "assistant":
+                        search_query = f"{original_topic} {amsg['content'][:100]}"
+                        break
                 query = (
                     f"Provide more detailed explanation about '{original_topic}' "
                     f"using only what is written in the document."
