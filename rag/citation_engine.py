@@ -131,13 +131,18 @@ Document Context, you are violating these instructions.
 
     user_prompt = (
         f"Recent conversation:\n{history_text}\n\n"
-        f"Document Context:\n{context}\n\n"
+        f"DOCUMENT CONTEXT (answer ONLY from this):\n{context}\n\n"
         f"Student Question: {query[:300]}\n\n"
-        f"Remember: Explain simply in your own words. Do not copy from the document."
+        f"STRICT INSTRUCTION: Only use the above context. "
+        f"The context does not mention any dates or years — "
+        f"so do NOT include any dates in your answer. "
+        f"Do NOT mention cloud computing, AI, or blockchain "
+        f"unless they appear in the context above. "
+        f"If a fact is not in the context, do not say it."
     )
 
     response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt},
