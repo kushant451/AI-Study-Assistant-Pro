@@ -113,9 +113,16 @@ Answer in detailed numbered points suitable for a 10-15 mark exam answer."""
         f"COVERAGE INSTRUCTION: {general_knowledge_instruction}"
     )
 
-    prompt = f"{system_prompt}\n\n{user_prompt}"
-    response = client.generate_content(prompt)
-    answer = response.text
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.2,
+        max_tokens=800,
+    )
+    answer = response.choices[0].message.content
 
     note = coverage_note(chunks)
     if "⚠️" in note:
