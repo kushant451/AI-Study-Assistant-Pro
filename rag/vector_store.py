@@ -8,6 +8,17 @@ from rag.embeddings import embed_texts, embed_query
 # so FAISS finds the RIGHT chunks from the PDF
 
 QUERY_EXPANSIONS = {
+    # ── follow-up fallbacks (overridden by last_topic in router) ──
+    "more theory": "ERP MRP MRPII evolution enterprise resource planning integrated business",
+    "add more theory": "ERP MRP MRPII evolution enterprise resource planning integrated business",
+    "more details": "ERP MRP MRPII evolution enterprise resource planning integrated business",
+    "explain more": "ERP MRP MRPII evolution enterprise resource planning integrated business",
+    "elaborate": "ERP MRP MRPII evolution enterprise resource planning integrated business",
+    "expand": "ERP MRP MRPII evolution enterprise resource planning integrated business",
+    "tell more": "ERP MRP MRPII evolution enterprise resource planning integrated business",
+    "continue": "ERP MRP MRPII evolution enterprise resource planning integrated business",
+
+    # ── existing entries ──
     "evolution of erp": "evolution ERP MRP MRPII history development MPS BOM material requirement planning manufacturing",
     "evolution": "evolution history development MRP MRPII ERP growth timeline",
     "what is erp": "ERP definition enterprise resource planning integrated business management system database",
@@ -95,7 +106,7 @@ def search(query, embedder, index, chunks, top_k=15):
     expanded_query = expand_query(query)
 
     query_vector = np.array(
-        embed_query(embedder, expanded_query),   # use expanded
+        embed_query(embedder, expanded_query),
         dtype="float32"
     )
 
@@ -121,10 +132,10 @@ def search(query, embedder, index, chunks, top_k=15):
                 {
                     "text":      chunk["text"],
                     "source":    chunk.get("source", "unknown"),
-                    "page":      chunk.get("page", None),      # ← include page
+                    "page":      chunk.get("page", None),
                     "chunk_id":  int(idx),
                     "relevance": round(float(relevance), 1),
-                    "distance":  round(float(dist), 4),        # ← for debug
+                    "distance":  round(float(dist), 4),
                 }
             )
 
