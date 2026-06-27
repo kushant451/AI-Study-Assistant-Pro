@@ -96,10 +96,13 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
 
     retrieved = search(query, embedder, index, chunks, top_k=3)
     context = build_context_with_citations(retrieved)
-    context = context[:800]
+    context = context[:3000]
     history_text = format_history(chat_history)
 
-    system_prompt = "You are a university study assistant. Use only the document context. Be concise."
+    system_prompt = """You are an expert ICAI exam tutor.
+    Answer STRICTLY from the document context below only.
+    Do NOT add outside examples, companies, or theory not present in the text.
+    Structure: definition → key points from text → conclusion."""
     user_prompt = f"Context:\n{context}\n\nQuestion: {query[:200]}"
 
     response = groq_call(
