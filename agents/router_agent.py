@@ -33,7 +33,8 @@ def is_follow_up(query: str):
     return any(
         k in query.lower() for k in [
             "more theory", "more details", "explain more",
-            "continue", "elaborate", "expand", "tell more"
+            "continue", "elaborate", "expand", "tell more",
+            "add more"
         ]
     )
 
@@ -58,7 +59,8 @@ BPR_KEYWORDS = [
 
 ERP_KEYWORDS = [
     "erp", "mrp", "mrpii", "enterprise resource", "material requirement",
-    "manufacturing resource", "bill of material", "bom", "master production"
+    "manufacturing resource", "bill of material", "bom", "master production",
+    "evolution of erp", "evolution erp"
 ]
 
 
@@ -76,7 +78,7 @@ def filter_chunks_by_topic(retrieved: list, topic: str) -> list:
 
     if is_erp_query and not is_bpr_query:
         filtered = [c for c in retrieved if not is_bpr_chunk(c)]
-        print(f"[FILTER] ERP topic: removed {len(retrieved)-len(filtered)} BPR chunks")
+        print(f"[FILTER] ERP topic: removed {len(retrieved)-len(filtered)} BPR chunks, kept {len(filtered)}")
         return filtered if filtered else retrieved
 
     if is_bpr_query and not is_erp_query:
@@ -129,10 +131,13 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history,
     effective_topic = last_topic if (is_follow_up(query) and last_topic) else query
 
     if is_follow_up(query) and last_retrieved is not None:
-        print(f"[FOLLOW-UP] Reusing cached chunks for: {last_topic}")
-        retrieved = last_retrieved
+        # ── use last topic as search query so FAISS finds right chunks ──
+        search_query = last_topic  # search on original topic not "more theory"
+        print(f"[FOLLOW-UP] Searching with original topic: '{search_query}'")
+        retrieved = search(search_query, embedder, index, chunks, top_k=8)
+        retrieved = filter_chunks_by_topic(retrieved, search_query)
         query = f"Provide more detailed explanation about '{last_topic}' using only the document."
-        print(f"[FOLLOW-UP] Using {len(retrieved)} cached chunks")
+        print(f"[FOLLOW-UP] Got {len(retrieved)} filtered chunks")
     else:
         retrieved = search(query, embedder, index, chunks, top_k=8)
         retrieved = filter_chunks_by_topic(retrieved, query)
