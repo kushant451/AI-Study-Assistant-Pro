@@ -49,6 +49,38 @@ def format_history(chat_history):
     return "\n".join(lines)
 
 
+def filter_context_by_topic(context: str, topic: str) -> str:
+    """Remove sentences/paragraphs not related to the topic."""
+    # keywords to EXCLUDE if topic is NOT about BPR
+    exclude_topics = {
+        "bpr": ["reengineering", "radical redesign", "cleanslate", "clean slate",
+                "tqm", "total quality", "suggestion scheme", "six sigma", "lean management"],
+        "erp": [],
+    }
+
+    topic_lower = topic.lower()
+
+    # detect what topic we are on
+    is_bpr_topic = any(k in topic_lower for k in ["bpr", "reengineering", "business process re"])
+    is_erp_topic = any(k in topic_lower for k in ["erp", "mrp", "enterprise resource"])
+
+    lines = context.split("\n")
+    filtered = []
+
+    for line in lines:
+        line_lower = line.lower()
+
+        # if user asked about ERP, remove BPR lines
+        if is_erp_topic and not is_bpr_topic:
+            if any(k in line_lower for k in exclude_topics["bpr"]):
+                print(f"[FILTER] Removed BPR line: {line[:60]}")
+                continue
+
+        filtered.append(line)
+
+    return "\n".join(filtered)
+
+
 def route_query(client, query, has_documents, chat_history):
     q = query.lower()
 
@@ -92,7 +124,7 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history,
     if is_follow_up(query) and last_retrieved is not None:
         print(f"[FOLLOW-UP] Reusing cached chunks for: {last_topic}")
         retrieved = last_retrieved
-        query = f"Expand further on: {last_topic}"
+        query = f"Provide more detailed explanation about '{last_topic}' using only the document."
         print(f"[FOLLOW-UP] Using {len(retrieved)} cached chunks")
     else:
         retrieved = search(query, embedder, index, chunks, top_k=6)
@@ -101,14 +133,21 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history,
         print(f"[NEW QUERY] Searched {len(retrieved)} chunks for: {query[:50]}")
 
     context = build_context_with_citations(retrieved)
+
+    # filter out irrelevant topic content from context
+    effective_topic = last_topic if (is_follow_up(query) and last_topic) else new_topic
+    context = filter_context_by_topic(context, effective_topic)
     context = context[:3000]
+
     history_text = format_history(chat_history)
 
-    system_prompt = """You are an expert ICAI exam tutor.
-Answer STRICTLY from the document context below only.
-Do NOT add outside examples, companies, or theory not present in the text.
-Do NOT invent limitations, advantages, or comparisons not in the context.
-If asked for more detail, expand ONLY on the same topic as before.
+    system_prompt = f"""You are an expert ICAI exam tutor.
+CURRENT TOPIC: '{effective_topic}'
+You MUST answer ONLY about the CURRENT TOPIC above.
+STRICTLY FORBIDDEN: Do not discuss BPR, Business Process Reengineering, TQM, Six Sigma, Lean, or ANY topic other than '{effective_topic}'.
+Use ONLY context sentences that directly discuss '{effective_topic}'.
+Ignore all other context even if present.
+Do NOT add outside examples or theory not in the text.
 Structure: definition → key points from text → conclusion."""
 
     user_prompt = f"""Context:
@@ -119,7 +158,8 @@ Conversation so far:
 
 Question: {query[:300]}
 
-Answer using ONLY the context above. If context is insufficient say: "The document does not cover this in detail." """
+Answer using ONLY the context above about '{effective_topic}'. 
+If context is insufficient say: "The document does not cover this in detail." """
 
     response = groq_call(
         client,
