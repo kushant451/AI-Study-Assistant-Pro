@@ -69,7 +69,7 @@ def route_query(client, query, has_documents, chat_history):
 
     response = groq_call(
         client,
-        model="llama-3.1-8b-instant",
+        model="llama-3.1-8b-instant",  # keep small model for routing only
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
         max_tokens=10,
@@ -127,7 +127,7 @@ Answer using ONLY the context above. If context is insufficient say: "The docume
 
     response = groq_call(
         client,
-        model="llama-3.1-8b-instant",
+        model="llama-3.3-70b-versatile",  # bigger model follows instructions better
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt},
