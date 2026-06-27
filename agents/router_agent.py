@@ -10,24 +10,19 @@ from agents.quiz_agent import generate_quiz
 from agents.summary_agent import summarize, detect_style
 from agents.web_agent import answer_with_web_search
 
-MODEL = "gemini-2.0-flash"
-
 
 def gemini_call(client, system_prompt, user_prompt):
-    """Call Gemini using the new google-genai SDK with retry logic."""
     for attempt in range(5):
         try:
             prompt = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
-            response = client.models.generate_content(
-                model=MODEL,
-                contents=prompt,
-            )
+            response = client.generate_content(prompt)
             return response.text
         except Exception as e:
             wait = min(5 * (attempt + 1), 30)
             print(f"[GEMINI ERROR] attempt {attempt+1}: {type(e).__name__}: {e}")
             time.sleep(wait)
     raise Exception("Gemini API failed after all retries.")
+
 
 
 def is_follow_up(query: str):
@@ -101,7 +96,7 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
     retrieved = search(query, embedder, index, chunks, top_k=8)
 
     context = build_context_with_citations(retrieved)
-    context = context[:5000]
+    context = context[:5000]  # Gemini handles much more
 
     history_text = format_history(chat_history)
 

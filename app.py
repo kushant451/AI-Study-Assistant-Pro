@@ -1,8 +1,10 @@
 import os
 from dotenv import load_dotenv
 load_dotenv()
+import os
+# print("MONGODB_URI =", os.getenv("MONGODB_URI"))
 import streamlit as st
-from google import genai  # ✅ New SDK
+from groq import Groq
 
 from rag.pdf_loader import extract_text_from_multiple
 from rag.chunker import chunk_documents, get_document_stats
@@ -171,17 +173,12 @@ defaults = {
     "interview_questions": [],
     "interview_results": {},
     "use_langgraph": False,
+    
 }
 
 for key, value in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = value
-
-
-# ── Helper: build a Gemini client from an API key ─────────────────────────────
-def make_client(api_key: str) -> genai.Client:
-    """Return a google-genai Client configured with the given API key."""
-    return genai.Client(api_key=api_key)
 
 
 def render_auth_screen():
@@ -258,9 +255,7 @@ with st.sidebar:
     st.success(f"Logged in as **{username}**")
 
     if st.button("Log out", use_container_width=True):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.rerun()
+        ...
 
     st.divider()
 
@@ -280,24 +275,26 @@ with st.sidebar:
 
     with st.expander("⚙️ Settings", expanded=True):
 
-        # ── Gemini API Key ─────────────────────────────────────
-        gemini_key = os.getenv("GEMINI_API_KEY")
-        if not gemini_key:
+        groq_key = os.getenv("GROQ_API_KEY")
+
+        if not groq_key:
             try:
-                gemini_key = st.secrets["GEMINI_API_KEY"]
+                groq_key = st.secrets["GROQ_API_KEY"]
             except Exception:
-                gemini_key = ""
+                groq_key = ""
 
         api_key = st.text_input(
-            "Gemini API Key",
+            "Groq API Key",
             type="password",
-            value=gemini_key
+            value=groq_key
         )
 
         st.session_state.use_langgraph = st.toggle(
             "Use LangGraph workflow",
             value=st.session_state.use_langgraph,
         )
+
+    
 
 
 if clear_button:
@@ -373,8 +370,9 @@ if st.session_state.doc_stats:
         f"✅ {st.session_state.doc_stats['document_count']} document(s) processed and ready."
     )
 else:
-    st.warning("📄 Upload and process PDFs to begin.")
-
+    st.warning(
+        "📄 Upload and process PDFs to begin."
+    )
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -392,10 +390,16 @@ with col2:
     )
 
 with col3:
-    st.metric("💬 Messages", len(st.session_state.messages))
+    st.metric(
+        "💬 Messages",
+        len(st.session_state.messages)
+    )
 
 with col4:
-    st.metric("🎤 Interviews", len(st.session_state.interview_results))
+    st.metric(
+        "🎤 Interviews",
+        len(st.session_state.interview_results)
+    )
 
 tab_chat, tab_interview, tab_progress = st.tabs(
     ["💬 Chat", "🎤 Mock Interview", "📈 Progress"]
@@ -411,28 +415,32 @@ with tab_chat:
 Upload one or more PDFs and click Process.
 
 Features:
-- Multi-PDF Question Answering
-- RAG-based Search
-- LangGraph Workflow
-- Mock Interviews
-- Progress Analytics
+• Multi-PDF Question Answering
+• RAG-based Search
+• LangGraph Workflow
+• Mock Interviews
+• Progress Analytics
 """)
 
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
+
             if msg["role"] == "assistant" and msg.get("tool"):
                 st.caption(f"🔧 Tool used: `{msg['tool']}`")
+
             if msg["role"] == "assistant":
                 with st.container(border=True):
                     st.write(msg["content"])
+
             else:
                 st.write(msg["content"])
+    
 
     final_query = st.chat_input("Ask something...")
 
     if final_query:
         if not api_key:
-            st.error("Enter your Gemini API key in the sidebar settings.")
+            st.error("Enter Groq API key")
             st.stop()
 
         st.session_state.messages.append({"role": "user", "content": final_query})
@@ -443,9 +451,7 @@ Features:
             for m in st.session_state.messages[:-1]
         ]
 
-        # ── ✅ New google-genai client ─────────────────────────
-        client = make_client(api_key)
-
+        client = Groq(api_key=api_key)
         agent_runner = run_agent_graph if st.session_state.use_langgraph else run_agent_manual
 
         with st.spinner("Thinking..."):
@@ -479,37 +485,39 @@ with tab_interview:
         )
 
         if st.button("Generate New Questions"):
-            if not api_key:
-                st.error("Enter your Gemini API key in the sidebar settings.")
-                st.stop()
-
             st.session_state.interview_questions = []
             st.session_state.interview_results = {}
 
-            # ── ✅ New google-genai client ─────────────────────
-            client = make_client(api_key)
+            client = Groq(api_key=api_key)
 
             questions = generate_interview_questions(
                 client,
                 st.session_state.chunks,
                 n=num_questions
             )
+
             st.session_state.interview_questions = questions
 
         for i, q in enumerate(st.session_state.interview_questions):
             st.markdown(f"**Q{i+1}. {q}**")
 
-            answer = st.text_area("Your answer", key=f"ans_{i}")
+            answer = st.text_area(
+                "Your answer",
+                key=f"ans_{i}"
+            )
 
-            if st.button("Submit", key=f"submit_{i}"):
-                if not api_key:
-                    st.error("Enter your Gemini API key in the sidebar settings.")
-                    st.stop()
+            if st.button(
+                "Submit",
+                key=f"submit_{i}"
+            ):
+                client = Groq(api_key=api_key)
 
-                # ── ✅ New google-genai client ─────────────────
-                client = make_client(api_key)
+                result = evaluate_answer(
+                    client,
+                    q,
+                    answer
+                )
 
-                result = evaluate_answer(client, q, answer)
                 st.session_state.interview_results[i] = result
 
                 log_interview_attempt(
@@ -520,11 +528,14 @@ with tab_interview:
                 )
 
             if i in st.session_state.interview_results:
-                st.info(st.session_state.interview_results[i]["feedback"])
+                st.info(
+                    st.session_state.interview_results[i]["feedback"]
+                )
 
     else:
-        st.info("Upload and process PDFs first.")
+        st.info("Upload docs first")
 
 
 with tab_progress:
     render_dashboard()
+

@@ -1,7 +1,4 @@
-import time
 from duckduckgo_search import DDGS
-
-MODEL = "gemini-2.0-flash"
 
 
 def search_web(query, max_results=5):
@@ -20,8 +17,7 @@ def answer_with_web_search(client, query, history_text=""):
         return "I couldn't find any web results for that query."
 
     snippets = "\n\n".join(
-        f"Title: {r.get('title', '')}\nSnippet: {r.get('body', '')}"
-        for r in results
+        f"Title: {r.get('title','')}\nSnippet: {r.get('body','')}" for r in results
     )
 
     system_prompt = (
@@ -35,20 +31,13 @@ def answer_with_web_search(client, query, history_text=""):
         f"Web search results:\n{snippets}\n\nQuestion: {query}"
     )
 
-    prompt = f"{system_prompt}\n\n{user_prompt}"
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.3,
+    )
 
-    # ✅ Fixed: was using OpenAI-style client.chat.completions.create()
-    # Now using google-genai SDK
-    for attempt in range(5):
-        try:
-            response = client.models.generate_content(
-                model=MODEL,
-                contents=prompt,
-            )
-            return response.text
-        except Exception as e:
-            wait = min(5 * (attempt + 1), 30)
-            print(f"[GEMINI ERROR] attempt {attempt+1}: {type(e).__name__}: {e}")
-            time.sleep(wait)
-
-    raise Exception("Gemini API failed after all retries.")
+    return response.choices[0].message.content

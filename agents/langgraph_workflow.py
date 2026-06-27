@@ -13,11 +13,6 @@ from agents.summary_agent import summarize, detect_style
 from agents.web_agent import answer_with_web_search
 from agents.router_agent import format_history, route_query, gemini_call
 
-# langgraph_workflow.py already imports gemini_call from router_agent,
-# which has been updated to use the new google-genai SDK.
-# No direct Gemini calls exist in this file — no changes needed beyond
-# ensuring all imported agents are also updated.
-
 
 class AgentState(TypedDict):
     query: str

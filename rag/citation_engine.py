@@ -1,7 +1,5 @@
 import time
 
-MODEL = "gemini-2.0-flash"
-
 
 def chunks_to_plain_text(chunks, limit=5):
     texts = []
@@ -80,7 +78,6 @@ def coverage_note(chunks):
 
 
 def answer_with_citations(client, query, chunks, chat_history=None):
-    """Answer a question using document chunks. Uses new google-genai SDK."""
     context = build_context_with_citations(chunks)
     context = context[:5000]
 
@@ -117,22 +114,8 @@ Answer in detailed numbered points suitable for a 10-15 mark exam answer."""
     )
 
     prompt = f"{system_prompt}\n\n{user_prompt}"
-
-    # ✅ New google-genai SDK call
-    for attempt in range(5):
-        try:
-            response = client.models.generate_content(
-                model=MODEL,
-                contents=prompt,
-            )
-            answer = response.text
-            break
-        except Exception as e:
-            wait = min(5 * (attempt + 1), 30)
-            print(f"[GEMINI ERROR] attempt {attempt+1}: {type(e).__name__}: {e}")
-            time.sleep(wait)
-    else:
-        raise Exception("Gemini API failed after all retries.")
+    response = client.generate_content(prompt)
+    answer = response.text
 
     note = coverage_note(chunks)
     if "⚠️" in note:
