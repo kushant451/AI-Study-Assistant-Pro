@@ -89,21 +89,32 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
         for msg in reversed(chat_history):
             if msg["role"] == "user" and not is_follow_up(msg["content"]):
                 query = (
-                    f"Expand each point in detail about {msg['content']} "
-                    f"using only the document context."
+                    f"Explain in more detail specifically about '{msg['content']}' "
+                    f"using only what is written in the document. "
+                    f"Do not add any outside information."
                 )
                 break
 
-    retrieved = search(query, embedder, index, chunks, top_k=3)
+    retrieved = search(query, embedder, index, chunks, top_k=6)
     context = build_context_with_citations(retrieved)
     context = context[:3000]
     history_text = format_history(chat_history)
 
     system_prompt = """You are an expert ICAI exam tutor.
-    Answer STRICTLY from the document context below only.
-    Do NOT add outside examples, companies, or theory not present in the text.
-    Structure: definition → key points from text → conclusion."""
-    user_prompt = f"Context:\n{context}\n\nQuestion: {query[:200]}"
+Answer STRICTLY from the document context below only.
+Do NOT add outside examples, companies, or theory not present in the text.
+Do NOT invent limitations, advantages, or comparisons not in the context.
+Structure: definition → key points from text → conclusion."""
+
+    user_prompt = f"""Context:
+{context}
+
+Conversation so far:
+{history_text}
+
+Question: {query[:200]}
+
+Answer using ONLY the context above. If the context does not contain enough information, say: "The document does not cover this in detail." """
 
     response = groq_call(
         client,
@@ -113,7 +124,7 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history):
             {"role": "user",   "content": user_prompt},
         ],
         temperature=0.1,
-        max_tokens=500,
+        max_tokens=800,
     )
 
     answer = response.choices[0].message.content
