@@ -456,16 +456,29 @@ Features:
         agent_runner = run_agent_graph if st.session_state.use_langgraph else run_agent_manual
 
         with st.spinner("Thinking..."):
-            tool_used, answer, extra, new_retrieved, new_topic = agent_runner(
-                client,
-                final_query,
-                embedder=st.session_state.embedder,
-                index=st.session_state.index,
-                chunks=st.session_state.chunks,
-                chat_history=history,
-                last_retrieved=st.session_state.last_retrieved_chunks,
-                last_topic=st.session_state.last_topic,
-            )
+            if st.session_state.use_langgraph:
+                result = agent_runner(
+                    client,
+                    final_query,
+                    embedder=st.session_state.embedder,
+                    index=st.session_state.index,
+                    chunks=st.session_state.chunks,
+                    chat_history=history,
+                )
+                tool_used, answer, extra = result
+                new_retrieved = st.session_state.last_retrieved_chunks
+                new_topic = st.session_state.last_topic
+            else:
+                tool_used, answer, extra, new_retrieved, new_topic = agent_runner(
+                    client,
+                    final_query,
+                    embedder=st.session_state.embedder,
+                    index=st.session_state.index,
+                    chunks=st.session_state.chunks,
+                    chat_history=history,
+                    last_retrieved=st.session_state.last_retrieved_chunks,
+                    last_topic=st.session_state.last_topic,
+                )
 
         # update cache in session state
         st.session_state.last_retrieved_chunks = new_retrieved
