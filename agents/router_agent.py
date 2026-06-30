@@ -145,7 +145,7 @@ def _doc_qa(client, query, embedder, index, chunks, chat_history,
         print(f"[NEW QUERY] {len(retrieved)} chunks after filter for: {query[:50]}")
 
     context = build_context_with_citations(retrieved)
-    context = context[:3000]
+    context = context[:6000]
     history_text = format_history(chat_history)
 
     system_prompt = f"""You are an expert ICAI exam tutor.
@@ -154,7 +154,8 @@ You MUST answer ONLY about the CURRENT TOPIC above.
 STRICTLY FORBIDDEN: Do not mention BPR, Business Process Reengineering, TQM, Six Sigma, Lean, or ANY topic other than '{effective_topic}'.
 Use ONLY context sentences that directly discuss '{effective_topic}'.
 Ignore all other context even if present.
-Do NOT add outside examples or theory not in the text.
+Do NOT add outside examples, theory, dates, years, decades, or statistics not explicitly present in the context.
+If the context does not mention specific years or a timeline, do NOT invent one.
 Structure: definition → key points from text → conclusion."""
 
     user_prompt = f"""Context:

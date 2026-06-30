@@ -92,18 +92,21 @@ def answer_with_citations(client, query, chunks, chat_history=None):
     chunk_count = len(chunks) if chunks else 0
     if chunk_count < 5:
         general_knowledge_instruction = (
-            "PDF coverage is LOW. After answering from the PDF, "
-            "add a clearly labeled '🌐 Additional Context (General Knowledge)' section "
-            "with 3-5 relevant general knowledge points. "
-            "Never contradict the PDF content."
+            "PDF coverage is LOW. Answer only using what is explicitly stated "
+            "in the DOCUMENT CONTEXT above. Do NOT add outside facts, dates, "
+            "years, decades, statistics, or examples not present in the context. "
+            "If the context is insufficient, explicitly state: "
+            "'The document provides limited information on this topic.'"
         )
     else:
         general_knowledge_instruction = (
-            "PDF coverage is HIGH. Answer strictly from PDF context only."
+            "PDF coverage is HIGH. Answer strictly from PDF context only. "
+            "Do NOT add outside facts, dates, or examples not present in the context."
         )
 
     system_prompt = """You are a strict document-based study assistant for university students.
 Use ONLY the information from the Document Context provided.
+Do NOT invent dates, years, decades, statistics, or examples not explicitly present in the context.
 Answer in detailed numbered points suitable for a 10-15 mark exam answer."""
 
     user_prompt = (
