@@ -42,30 +42,28 @@ def doc_qa_node(state: AgentState) -> dict:
         state["embedder"],
         state["index"],
         state["chunks"],
-        top_k=5,
+        top_k=8,
     )
     context = build_context_with_citations(retrieved)
-    context = context[:800]
+    context = context[:6000]
     history_text = format_history(state["chat_history"])
 
-    system_prompt = """You are an expert academic study assistant.
-Answer only from the provided context.
-If the user asks a follow-up request such as more theory, elaborate,
-explain more, expand, more details — continue the SAME topic discussed
-in the previous answer.
-Use headings and bullet points.
-Provide exam-oriented explanations."""
-
+    system_prompt = """You are an expert ICAI exam tutor.
+    Answer ONLY using the context provided below.
+    STRICTLY FORBIDDEN: Do NOT add any dates, years, decades, statistics, timelines, or examples that are not explicitly present in the context.
+    Do NOT use your own training knowledge to fill gaps.
+    If the context does not contain enough information, say: "The document does not cover this in detail."
+    Use headings and bullet points for exam-oriented explanations."""
     user_prompt = (
         f"Recent conversation:\n{history_text}\n\n"
         f"Context:\n{context}\n\n"
         f"Current Question: {state['query']}\n\n"
-        "If this is a follow-up request, expand the previously discussed topic only."
+        "REMINDER: Answer ONLY from the context above. Do NOT invent dates, timelines, or facts not in the context."
     )
 
     response = groq_call(
         state["client"],
-        model="llama-3.1-8b-instant",
+        model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
