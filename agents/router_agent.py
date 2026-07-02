@@ -175,6 +175,7 @@ Answer using ONLY the context above about '{effective_topic}'.
 If the context mentions MRP, MRPII, or MRP III (Money Resource Planning), include ALL of them in the evolution chain.
 If context is insufficient say: "The document does not cover this in detail." """
 
+
     response = groq_call(
         client,
         model="llama-3.3-70b-versatile",
