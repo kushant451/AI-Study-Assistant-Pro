@@ -52,7 +52,7 @@ def doc_qa_node(state: AgentState) -> dict:
     Answer ONLY using the context provided below.
     STRICTLY FORBIDDEN: Do NOT add any dates, years, decades, statistics, timelines, or examples that are not explicitly present in the context.
     Do NOT use your own training knowledge to fill gaps.
-    If the context does not contain enough information, say: "The document does not cover this in detail."
+    ONLY if the context contains NO relevant information at all, say: "The document does not cover this in detail." Do NOT add this line if you have already answered the question.
     Use headings and bullet points for exam-oriented explanations."""
     user_prompt = (
         f"Recent conversation:\n{history_text}\n\n"
