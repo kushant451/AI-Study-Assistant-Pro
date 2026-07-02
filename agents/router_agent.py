@@ -58,9 +58,9 @@ BPR_KEYWORDS = [
 ]
 
 ERP_KEYWORDS = [
-    "erp", "mrp", "mrpii", "enterprise resource", "material requirement",
-    "manufacturing resource", "bill of material", "bom", "master production",
-    "evolution of erp", "evolution erp"
+    "erp", "mrp", "mrpii", "mrp iii", "enterprise resource", "material requirement",
+    "manufacturing resource", "money resource", "bill of material", "bom", 
+    "master production", "evolution of erp", "evolution erp"
 ]
 
 
