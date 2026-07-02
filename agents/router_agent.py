@@ -156,7 +156,12 @@ Use ONLY context sentences that directly discuss '{effective_topic}'.
 Ignore all other context even if present.
 Do NOT add outside examples, theory, dates, years, decades, or statistics not explicitly present in the context.
 If the context does not mention specific years or a timeline, do NOT invent one.
-Structure: definition → key points from text → conclusion."""
+Do NOT write in paragraph format.
+Use this structure with headings and bullet points:
+## Definition
+## Key Points
+## Evolution Chain
+## Conclusion"""
 
     user_prompt = f"""Context:
 {context}
