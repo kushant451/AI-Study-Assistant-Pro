@@ -58,7 +58,7 @@ def doc_qa_node(state: AgentState) -> dict:
         f"Recent conversation:\n{history_text}\n\n"
         f"Context:\n{context}\n\n"
         f"Current Question: {state['query']}\n\n"
-        "REMINDER: Answer ONLY from the context above. Do NOT invent dates, timelines, or facts not in the context."
+        "REMINDER: Answer ONLY from the context above. Do NOT invent dates, timelines, or facts not in the context. If the context mentions MRP, MRPII, or MRP III (Money Resource Planning), include ALL of them in the evolution chain."
     )
 
     response = groq_call(
